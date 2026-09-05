@@ -63,6 +63,14 @@ jobs:
             ~/Library/Caches/org.swift.swiftpm
           key: xcode-build-cache-${{ github.ref_name }}-
 
+      - name: Clear stale SwiftPM binary artifacts
+        run: |
+          # Xcode can leave a half-created binary-target artifact directory on hosted runners.
+          # When that happens SwiftPM refuses to redownload the OpenSSL xcframework with
+          # "already exists in file system". Binary artifacts are safe to redownload.
+          rm -rf "$HOME/Library/Caches/org.swift.swiftpm/artifacts"
+          mkdir -p "$HOME/Library/Caches/org.swift.swiftpm/artifacts"
+
       - name: Build
         env:
           BUILD_LOG_ZIP_PASSWORD: ${{ secrets.BUILD_LOG_ZIP_PASSWORD }}
@@ -77,9 +85,9 @@ jobs:
         run: |
           if [ -f build/logs/build.log ]; then
             echo '=== package/build diagnostics ==='
-            grep -nE 'Could not resolve package dependencies|error:|fatal:|dependency|requires|revision|version' build/logs/build.log | tail -n 160 || true
+            grep -nE 'Could not resolve package dependencies|error:|fatal:|dependency|requires|revision|version|already exists in file system' build/logs/build.log | tail -n 180 || true
             echo '=== build log tail ==='
-            tail -n 220 build/logs/build.log || true
+            tail -n 240 build/logs/build.log || true
           else
             echo 'build/logs/build.log was not produced'
           fi
