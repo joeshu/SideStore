@@ -19,6 +19,8 @@ private func stagedAuthError(_ error: Error, stage: String) -> NSError {
     userInfo[sideStoreAuthStageKey] = stage
     userInfo[sideStoreAuthOriginalDomainKey] = nsError.domain
     userInfo[sideStoreAuthOriginalCodeKey] = nsError.code
+    // Preserve the original NSError so UI diagnostics can surface the real domain/code
+    // without copying authentication credentials, tokens, Anisette data or 2FA values.
     userInfo[NSUnderlyingErrorKey] = nsError
 
     return NSError(
