@@ -9,6 +9,27 @@
 @preconcurrency import UIKit
 import SideSign
 
+private let sideStoreAuthStageKey = "SideStoreAuthStage"
+private let sideStoreAuthOriginalDomainKey = "SideStoreAuthOriginalDomain"
+private let sideStoreAuthOriginalCodeKey = "SideStoreAuthOriginalCode"
+
+private func stagedAuthError(_ error: Error, stage: String) -> NSError {
+    let nsError = error as NSError
+    var userInfo = nsError.userInfo
+    userInfo[sideStoreAuthStageKey] = stage
+    userInfo[sideStoreAuthOriginalDomainKey] = nsError.domain
+    userInfo[sideStoreAuthOriginalCodeKey] = nsError.code
+    // Preserve the original NSError so UI diagnostics can surface the real domain/code
+    // without copying authentication credentials, tokens, Anisette data or 2FA values.
+    userInfo[NSUnderlyingErrorKey] = nsError
+
+    return NSError(
+        domain: "SideStore.Authentication",
+        code: nsError.code,
+        userInfo: userInfo
+    )
+}
+
 public class DeveloperPortalService {
     public static let shared: DeveloperPortalService = DeveloperPortalAuthService()
     
@@ -105,23 +126,61 @@ class DeveloperPortalAuthService: DeveloperPortalService {
     }
 
     func fetchAccount(session: ALTAppleAPISession) async throws -> ALTAccount {
-        try await ALTAppleAPI.shared.fetchAccount(session: session)
+        debugLog("[AuthStage] developer_portal_account start")
+        do {
+            let account = try await ALTAppleAPI.shared.fetchAccount(session: session)
+            debugLog("[AuthStage] developer_portal_account success")
+            return account
+        } catch {
+            let nsError = error as NSError
+            debugLog("[AuthStage] developer_portal_account failure domain=\(nsError.domain) code=\(nsError.code)")
+            throw stagedAuthError(error, stage: "developer_portal_account")
+        }
     }
 
     func authenticate(appleID: String, password: String, anisetteData: ALTAnisetteData, xcodeVersion: String, verificationHandler: DeveloperPortal.VerificationHandler?) async throws -> (ALTAccount, ALTAppleAPISession) {
-        let authSession = try await ALTAppleAPI.shared.authenticate(
-            appleID: appleID,
-            password: password,
-            anisetteData: anisetteData,
-            xcodeVersion: xcodeVersion,
-            verificationHandler: verificationHandler
-        )
-        return (authSession.account, authSession.session)
+        // Reaching this boundary means Anisette data was obtained successfully and
+        // subsequent failures are within the Apple GSA/SRP authentication stage.
+        debugLog("[AuthStage] anisette success; gsa_srp start")
+
+        let stagedVerificationHandler: DeveloperPortal.VerificationHandler? = verificationHandler.map { originalHandler in
+            return { mode, completionHandler in
+                let modeName: String
+                switch mode {
+                case .trustedDevice:
+                    modeName = "trusted_device"
+                case .sms:
+                    modeName = "sms"
+                case .voice:
+                    modeName = "voice"
+                }
+                debugLog("[AuthStage] two_factor requested mode=\(modeName)")
+                originalHandler(mode, completionHandler)
+            }
+        }
+
+        do {
+            let authSession = try await ALTAppleAPI.shared.authenticate(
+                appleID: appleID,
+                password: password,
+                anisetteData: anisetteData,
+                xcodeVersion: xcodeVersion,
+                verificationHandler: stagedVerificationHandler
+            )
+            debugLog("[AuthStage] gsa_srp success")
+            return (authSession.account, authSession.session)
+        } catch {
+            let nsError = error as NSError
+            debugLog("[AuthStage] gsa_srp failure domain=\(nsError.domain) code=\(nsError.code)")
+            throw stagedAuthError(error, stage: "gsa_srp")
+        }
     }
     
     func authenticateWithToken(adsid: String, xcodeToken: String, anisetteData: ALTAnisetteData, xcodeVersion: String) async throws -> (ALTAccount, ALTAppleAPISession) {
+        debugLog("[AuthStage] token_session start")
         let session = ALTAppleAPISession(dsid: adsid, authToken: xcodeToken, anisetteData: anisetteData, xcodeVersion: xcodeVersion)
         let account = try await fetchAccount(session: session)
+        debugLog("[AuthStage] token_session success")
         return (account, session)
     }
 }

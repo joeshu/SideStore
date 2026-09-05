@@ -63,6 +63,21 @@ jobs:
             ~/Library/Caches/org.swift.swiftpm
           key: xcode-build-cache-${{ github.ref_name }}-
 
+      - name: Pre-populate Binary Artifacts
+        run: |
+          ARTIFACTS_DIR="$HOME/Library/Caches/org.swift.swiftpm/artifacts"
+          mkdir -p "$ARTIFACTS_DIR"
+
+          OPENSSL_FILE="$ARTIFACTS_DIR/https___github_com_krzyzanowskim_OpenSSL_releases_download_3_6_2000_OpenSSL_xcframework_zip"
+          if [ ! -f "$OPENSSL_FILE" ]; then
+            curl -fsSL "https://github.com/krzyzanowskim/OpenSSL/releases/download/3.6.2000/OpenSSL.xcframework.zip" -o "$OPENSSL_FILE"
+          fi
+
+          UNICORN_FILE="$ARTIFACTS_DIR/https___github_com_mahee96_unicorn_releases_download_2_1_4_multiarch_Unicorn_xcframework_zip"
+          if [ ! -f "$UNICORN_FILE" ]; then
+            curl -fsSL "https://github.com/mahee96/unicorn/releases/download/2.1.4-multiarch/Unicorn.xcframework.zip" -o "$UNICORN_FILE"
+          fi
+
       - name: Build
         env:
           BUILD_LOG_ZIP_PASSWORD: ${{ secrets.BUILD_LOG_ZIP_PASSWORD }}
@@ -71,6 +86,26 @@ jobs:
           python3 scripts/ci/workflow.py encrypt-build
           mv SideStore.ipa SideStore-${{ env.MARKETING_VERSION }}.ipa
           exit $STATUS
+
+      - name: Show dependency/build failure diagnostics
+        if: failure()
+        run: |
+          if [ -f build/logs/build.log ]; then
+            echo '=== package/build diagnostics ==='
+            grep -nE 'Could not resolve package dependencies|error:|fatal:|dependency|requires|revision|version|already exists in file system' build/logs/build.log | tail -n 180 || true
+            echo '=== build log tail ==='
+            tail -n 240 build/logs/build.log || true
+          else
+            echo 'build/logs/build.log was not produced'
+          fi
+
+      - name: Upload raw build logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: raw-build-logs-${{ env.MARKETING_VERSION }}
+          path: build/logs
+          if-no-files-found: ignore
 
       - name: Save Cache
         if: ${{ steps.xcode-cache-fallback.outputs.cache-hit != 'true' }}
