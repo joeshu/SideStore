@@ -14,6 +14,8 @@ public final class AppBootManager {
     public static let shared = AppBootManager()
     
     private let lock = NSLock()
+    private static let udidValidationMaxAttempts = 3
+    private static let udidValidationRetryDelaysNanoseconds: [UInt64] = [200_000_000, 500_000_000]
     
     private var cachedNeedsPairingPrompt = false
     public var needsPairingPrompt: Bool {
@@ -29,7 +31,43 @@ public final class AppBootManager {
     
     private init() {}
     
-
+    /// Validates the already-started minimuxer/device connection without replaying
+    /// Apple authentication or restarting minimuxer itself. Invalid pairing is a
+    /// terminal condition and is never retried; other early connection failures get
+    /// a short bounded retry window to absorb device/tunnel startup races.
+    private nonisolated func fetchUDIDWithBoundedRetry() async throws -> String? {
+        var attempt = 1
+        
+        while true {
+            do {
+                let udid = try await fetchUDID()
+                debugLog("[AppBootManager] UDID validation succeeded attempt=\(attempt) udidPresent=\(udid != nil)")
+                return udid
+            } catch {
+                if case MinimuxerError.invalidPairing = error {
+                    debugLog("[AppBootManager] UDID validation failed terminal=invalidPairing attempt=\(attempt)")
+                    throw error
+                }
+                
+                if Task.isCancelled || attempt >= Self.udidValidationMaxAttempts {
+                    let nsError = error as NSError
+                    debugLog("[AppBootManager] UDID validation failed terminal attempt=\(attempt) domain=\(nsError.domain) code=\(nsError.code)")
+                    throw error
+                }
+                
+                let nsError = error as NSError
+                debugLog("[AppBootManager] UDID validation transient failure attempt=\(attempt) domain=\(nsError.domain) code=\(nsError.code); retrying")
+                let delayIndex = min(attempt - 1, Self.udidValidationRetryDelaysNanoseconds.count - 1)
+                do {
+                    try await Task.sleep(nanoseconds: Self.udidValidationRetryDelaysNanoseconds[delayIndex])
+                } catch {
+                    throw error
+                }
+                attempt += 1
+            }
+        }
+    }
+    
     public nonisolated func startMinimuxer(pairingFile: String) async throws {
         debugLog("[AppBootManager] startMinimuxer() entered")
         defer { debugLog("[AppBootManager] startMinimuxer() exited") }
@@ -41,19 +79,21 @@ public final class AppBootManager {
 
         try await minimuxerStart(pairingFile, mountPath: FileManager.default.documentsDirectory.absoluteString)
         
-        // Validate the pairing by trying to fetch the UDID
+        // Validate the pairing/device connection after minimuxer has started. Retry only
+        // this narrow boundary so login, 2FA and minimuxer startup are never replayed.
         do {
-            debugLog("[AppBootManager] startMinimuxer(): Minimuxer fetchUDID() based connection starting...")
-            let deviceUDID = try await fetchUDID()
-            debugLog("[AppBootManager] startMinimuxer(): Minimuxer fetchUDID() based connection test SUCCEEDED. UDID: \(deviceUDID ?? "nil")")
+            debugLog("[AppBootManager] startMinimuxer(): UDID connection validation starting")
+            _ = try await fetchUDIDWithBoundedRetry()
+            debugLog("[AppBootManager] startMinimuxer(): UDID connection validation succeeded")
             self.needsPairingPrompt = false
         } catch {
             if case MinimuxerError.invalidPairing = error {
-                debugLog("[AppBootManager] startMinimuxer(): Minimuxer fetchUDID() based connection test FAILED. \(error)")
+                debugLog("[AppBootManager] startMinimuxer(): UDID connection validation failed: invalid pairing")
                 self.needsPairingPrompt = true
                 throw error
             } else {
-                debugLog("[AppBootManager] startMinimuxer(): Minimuxer fetchUDID() based connection test FAILED but PAIRING FILE IS VALID. \(error)")
+                let nsError = error as NSError
+                debugLog("[AppBootManager] startMinimuxer(): UDID connection validation exhausted retries but pairing file remains accepted domain=\(nsError.domain) code=\(nsError.code)")
             }
         }
     }
