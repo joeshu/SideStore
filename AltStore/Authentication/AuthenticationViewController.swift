@@ -31,15 +31,16 @@ final class AuthenticationViewController: UIViewController
     {
         super.viewDidLoad()
         
-        // fetch anisette servers asap when loading Auth Screen (if list is empty)
+        // Fetch anisette servers as soon as the authentication screen appears.
         Task {
             if await AnisetteServersManager.shared.getActiveServerURLs().isEmpty {
                 let sourceURL = UserDefaults.standard.menuAnisetteList
                 do {
                     _ = try await AnisetteServersManager.shared.syncWithRemote(sourceURLString: sourceURL, forceRemote: true)
-                    debugLog("AuthenticationViewController: Server list refresh request completed for sourceURL: \(sourceURL)")
+                    debugLog("AuthenticationViewController: anisette server list refresh completed")
                 } catch {
-                    debugLog("AuthenticationViewController: Server list refresh request Failed for sourceURL: \(sourceURL) Error: \(error)")
+                    let nsError = error as NSError
+                    debugLog("AuthenticationViewController: anisette server list refresh failed domain=\(nsError.domain) code=\(nsError.code)")
                 }
             }
         }
@@ -152,6 +153,66 @@ private extension AuthenticationViewController
         
         return (emailAddress, password)
     }
+
+    func diagnosticAuthenticationError(from error: NSError) -> NSError
+    {
+        let originalDescription = error.localizedDescription
+        let loweredDescription = originalDescription.lowercased()
+        let underlying = error.userInfo[NSUnderlyingErrorKey] as? NSError
+
+        let title: String
+        let message: String
+
+        if error.domain == NSCocoaErrorDomain &&
+            (error.code == 3840 || loweredDescription.contains("correct format") || loweredDescription.contains("couldn’t be read"))
+        {
+            title = NSLocalizedString("Sign-In Response Format Error", comment: "")
+            message = NSLocalizedString(
+                "SideStore received authentication data in an unexpected format. This is usually caused by the Anisette service, an Apple authentication endpoint, or a proxy/VPN returning HTML or another non-JSON response. Change or refresh the Anisette server, verify network/VPN connectivity, then try again.",
+                comment: ""
+            )
+        }
+        else if loweredDescription.contains("anisette")
+        {
+            title = NSLocalizedString("Anisette Error", comment: "")
+            message = NSLocalizedString(
+                "SideStore could not obtain valid Anisette authentication headers. Refresh or switch the Anisette server and try again.",
+                comment: ""
+            )
+        }
+        else if loweredDescription.contains("timed out") || loweredDescription.contains("network") || loweredDescription.contains("offline")
+        {
+            title = NSLocalizedString("Authentication Network Error", comment: "")
+            message = NSLocalizedString(
+                "The Apple ID authentication request could not complete because of a network error. Check Wi-Fi, VPN/proxy settings and try again.",
+                comment: ""
+            )
+        }
+        else
+        {
+            title = NSLocalizedString("Failed to Sign In", comment: "")
+            message = originalDescription
+        }
+
+        var diagnosticParts = [message]
+        diagnosticParts.append("[\(error.domain):\(error.code)]")
+        if let underlying {
+            diagnosticParts.append("Underlying [\(underlying.domain):\(underlying.code)]")
+        }
+
+        debugLog(
+            "AuthenticationViewController: sign-in failed domain=\(error.domain) code=\(error.code) underlyingDomain=\(underlying?.domain ?? "none") underlyingCode=\(underlying?.code ?? 0)"
+        )
+
+        return NSError(
+            domain: error.domain,
+            code: error.code,
+            userInfo: [
+                NSLocalizedDescriptionKey: diagnosticParts.joined(separator: "\n"),
+                NSLocalizedFailureReasonErrorKey: title
+            ]
+        ).withLocalizedTitle(title)
+    }
 }
 
 private extension AuthenticationViewController
@@ -176,8 +237,8 @@ private extension AuthenticationViewController
                 
             case .failure(let error as NSError):
                 DispatchQueue.main.async {
-                    let error = error.withLocalizedTitle(NSLocalizedString("Failed to Sign In", comment: ""))
-                    let toastView = ToastView(error: error)
+                    let diagnosticError = self.diagnosticAuthenticationError(from: error)
+                    let toastView = ToastView(error: diagnosticError)
                     toastView.show(in: self)
                     toastView.backgroundColor = .white
                     toastView.textLabel.textColor = .altPrimary
