@@ -72,6 +72,26 @@ jobs:
           mv SideStore.ipa SideStore-${{ env.MARKETING_VERSION }}.ipa
           exit $STATUS
 
+      - name: Show dependency/build failure diagnostics
+        if: failure()
+        run: |
+          if [ -f build/logs/build.log ]; then
+            echo '=== package/build diagnostics ==='
+            grep -nE 'Could not resolve package dependencies|error:|fatal:|dependency|requires|revision|version' build/logs/build.log | tail -n 160 || true
+            echo '=== build log tail ==='
+            tail -n 220 build/logs/build.log || true
+          else
+            echo 'build/logs/build.log was not produced'
+          fi
+
+      - name: Upload raw build logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: raw-build-logs-${{ env.MARKETING_VERSION }}
+          path: build/logs
+          if-no-files-found: ignore
+
       - name: Save Cache
         if: ${{ steps.xcode-cache-fallback.outputs.cache-hit != 'true' }}
         uses: actions/cache/save@v3
