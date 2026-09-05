@@ -159,49 +159,78 @@ private extension AuthenticationViewController
         let originalDescription = error.localizedDescription
         let loweredDescription = originalDescription.lowercased()
         let underlying = error.userInfo[NSUnderlyingErrorKey] as? NSError
+        let stage = error.userInfo["SideStoreAuthStage"] as? String
 
         let title: String
         let message: String
 
-        if error.domain == NSCocoaErrorDomain &&
-            (error.code == 3840 || loweredDescription.contains("correct format") || loweredDescription.contains("couldn’t be read"))
+        switch stage
         {
-            title = NSLocalizedString("Sign-In Response Format Error", comment: "")
+        case "gsa_srp":
+            title = NSLocalizedString("Apple Authentication Error", comment: "")
             message = NSLocalizedString(
-                "SideStore received authentication data in an unexpected format. This is usually caused by the Anisette service, an Apple authentication endpoint, or a proxy/VPN returning HTML or another non-JSON response. Change or refresh the Anisette server, verify network/VPN connectivity, then try again.",
+                "The failure occurred after Anisette data was obtained, while SideStore was authenticating with Apple's GSA/SRP service. Check the Apple ID credentials, network/VPN path, and Apple authentication availability, then try again.",
                 comment: ""
             )
-        }
-        else if loweredDescription.contains("anisette")
-        {
-            title = NSLocalizedString("Anisette Error", comment: "")
+
+        case "developer_portal_account":
+            title = NSLocalizedString("Apple Developer Portal Error", comment: "")
             message = NSLocalizedString(
-                "SideStore could not obtain valid Anisette authentication headers. Refresh or switch the Anisette server and try again.",
+                "Apple ID authentication produced a session, but SideStore could not read the account from Apple's Developer Portal. Retry later or check the network/VPN path to Apple developer services.",
                 comment: ""
             )
-        }
-        else if loweredDescription.contains("timed out") || loweredDescription.contains("network") || loweredDescription.contains("offline")
-        {
-            title = NSLocalizedString("Authentication Network Error", comment: "")
+
+        case "two_factor":
+            title = NSLocalizedString("Two-Factor Authentication Error", comment: "")
             message = NSLocalizedString(
-                "The Apple ID authentication request could not complete because of a network error. Check Wi-Fi, VPN/proxy settings and try again.",
+                "The sign-in reached Apple's two-factor authentication stage but verification could not complete. Request a new code and try again.",
                 comment: ""
             )
-        }
-        else
-        {
-            title = NSLocalizedString("Failed to Sign In", comment: "")
-            message = originalDescription
+
+        default:
+            if error.domain == NSCocoaErrorDomain &&
+                (error.code == 3840 || loweredDescription.contains("correct format") || loweredDescription.contains("couldn’t be read"))
+            {
+                title = NSLocalizedString("Sign-In Response Format Error", comment: "")
+                message = NSLocalizedString(
+                    "SideStore received authentication data in an unexpected format before a later authentication stage could be identified. This is commonly caused by the Anisette service, an Apple endpoint, or a proxy/VPN returning HTML or another non-JSON response. Refresh or switch the Anisette server, check network/VPN connectivity, then try again.",
+                    comment: ""
+                )
+            }
+            else if loweredDescription.contains("anisette")
+            {
+                title = NSLocalizedString("Anisette Error", comment: "")
+                message = NSLocalizedString(
+                    "SideStore could not obtain valid Anisette authentication headers. Refresh or switch the Anisette server and try again.",
+                    comment: ""
+                )
+            }
+            else if loweredDescription.contains("timed out") || loweredDescription.contains("network") || loweredDescription.contains("offline")
+            {
+                title = NSLocalizedString("Authentication Network Error", comment: "")
+                message = NSLocalizedString(
+                    "The Apple ID authentication request could not complete because of a network error. Check Wi-Fi, VPN/proxy settings and try again.",
+                    comment: ""
+                )
+            }
+            else
+            {
+                title = NSLocalizedString("Failed to Sign In", comment: "")
+                message = originalDescription
+            }
         }
 
         var diagnosticParts = [message]
+        if let stage {
+            diagnosticParts.append("Stage: \(stage)")
+        }
         diagnosticParts.append("[\(error.domain):\(error.code)]")
         if let underlying {
             diagnosticParts.append("Underlying [\(underlying.domain):\(underlying.code)]")
         }
 
         debugLog(
-            "AuthenticationViewController: sign-in failed domain=\(error.domain) code=\(error.code) underlyingDomain=\(underlying?.domain ?? "none") underlyingCode=\(underlying?.code ?? 0)"
+            "AuthenticationViewController: sign-in failed stage=\(stage ?? "unknown") domain=\(error.domain) code=\(error.code) underlyingDomain=\(underlying?.domain ?? "none") underlyingCode=\(underlying?.code ?? 0)"
         )
 
         return NSError(
