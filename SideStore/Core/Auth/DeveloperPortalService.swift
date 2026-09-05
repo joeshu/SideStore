@@ -139,7 +139,8 @@ class DeveloperPortalAuthService: DeveloperPortalService {
     }
 
     func authenticate(appleID: String, password: String, anisetteData: ALTAnisetteData, xcodeVersion: String, verificationHandler: DeveloperPortal.VerificationHandler?) async throws -> (ALTAccount, ALTAppleAPISession) {
-        // Reaching this boundary means Anisette data was obtained successfully.
+        // Reaching this boundary means Anisette data was obtained successfully and
+        // subsequent failures are within the Apple GSA/SRP authentication stage.
         debugLog("[AuthStage] anisette success; gsa_srp start")
 
         let stagedVerificationHandler: DeveloperPortal.VerificationHandler? = verificationHandler.map { originalHandler in
