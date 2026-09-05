@@ -96,7 +96,7 @@ public class DeveloperPortalService {
     }
 
     public func updateAppGroup(_ group: ALTAppGroup, team: ALTTeam, session: ALTAppleAPISession) async throws -> ALTAppGroup {
-        try await ALTAppleAPI.shared.updateAppGroup(group, team: team, session: session)
+        try await ALTAppleAPI.shared.updateAppID(group, team: team, session: session)
     }
 
     public func assignAppID(_ appID: ALTAppID, to groups: [ALTAppGroup], team: ALTTeam, session: ALTAppleAPISession) async throws -> ALTAppID {
