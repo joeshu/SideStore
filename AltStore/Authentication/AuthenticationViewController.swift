@@ -16,6 +16,7 @@ final class AuthenticationViewController: UIViewController
     var completionHandler: (((ALTAccount, ALTAppleAPISession, String)?) -> Void)?
     
     private weak var toastView: ToastView?
+    private var signInTrace: SignInTrace?
     
     @IBOutlet private var appleIDTextField: UITextField!
     @IBOutlet private var passwordTextField: UITextField!
@@ -130,6 +131,96 @@ final class AuthenticationViewController: UIViewController
 
 private extension AuthenticationViewController
 {
+    struct SignInTrace: Codable
+    {
+        enum Outcome: String, Codable
+        {
+            case inProgress
+            case succeeded
+            case failed
+            case requiresTwoFactor
+        }
+        
+        let startedAt: Date
+        var completedAt: Date?
+        var stage: String
+        var outcome: Outcome
+        var errorDomain: String?
+        var errorCode: Int?
+        var underlyingErrorDomain: String?
+        var underlyingErrorCode: Int?
+        
+        var elapsedMilliseconds: Int
+        {
+            let end = self.completedAt ?? Date()
+            return max(0, Int(end.timeIntervalSince(self.startedAt) * 1000))
+        }
+    }
+    
+    static var lastSignInTraceDefaultsKey: String { "SideStoreLastSignInTrace" }
+    
+    func beginSignInTrace()
+    {
+        self.signInTrace = SignInTrace(
+            startedAt: Date(),
+            completedAt: nil,
+            stage: "apple_authentication",
+            outcome: .inProgress,
+            errorDomain: nil,
+            errorCode: nil,
+            underlyingErrorDomain: nil,
+            underlyingErrorCode: nil
+        )
+        self.persistSignInTrace()
+        debugLog("AuthenticationViewController: sign-in trace started stage=apple_authentication")
+    }
+    
+    func finishSignInTrace(outcome: SignInTrace.Outcome, error: NSError? = nil)
+    {
+        guard var trace = self.signInTrace else { return }
+        let underlying = error?.userInfo[NSUnderlyingErrorKey] as? NSError
+        if let reportedStage = error?.userInfo["SideStoreAuthStage"] as? String, !reportedStage.isEmpty {
+            trace.stage = reportedStage
+        } else if outcome == .succeeded {
+            trace.stage = "authenticated"
+        } else if outcome == .requiresTwoFactor {
+            trace.stage = "two_factor"
+        }
+        trace.completedAt = Date()
+        trace.outcome = outcome
+        trace.errorDomain = error?.domain
+        trace.errorCode = error?.code
+        trace.underlyingErrorDomain = underlying?.domain
+        trace.underlyingErrorCode = underlying?.code
+        self.signInTrace = trace
+        self.persistSignInTrace()
+        
+        debugLog(
+            "AuthenticationViewController: sign-in trace finished stage=\(trace.stage) outcome=\(trace.outcome.rawValue) elapsedMs=\(trace.elapsedMilliseconds) domain=\(trace.errorDomain ?? "none") code=\(trace.errorCode ?? 0) underlyingDomain=\(trace.underlyingErrorDomain ?? "none") underlyingCode=\(trace.underlyingErrorCode ?? 0)"
+        )
+    }
+    
+    func persistSignInTrace()
+    {
+        guard let trace = self.signInTrace else { return }
+        do {
+            let data = try JSONEncoder().encode(trace)
+            UserDefaults.standard.set(data, forKey: Self.lastSignInTraceDefaultsKey)
+        } catch {
+            let nsError = error as NSError
+            debugLog("AuthenticationViewController: failed to persist sign-in trace domain=\(nsError.domain) code=\(nsError.code)")
+        }
+    }
+    
+    func setSignInStageTitle(_ title: String)
+    {
+        UIView.performWithoutAnimation {
+            self.signInButton.setImage(nil, for: .normal)
+            self.signInButton.setTitle(title, for: .normal)
+            self.signInButton.layoutIfNeeded()
+        }
+    }
+    
     func update()
     {
         if let _ = self.validate()
@@ -253,18 +344,23 @@ private extension AuthenticationViewController
         self.appleIDTextField.resignFirstResponder()
         self.passwordTextField.resignFirstResponder()
         
+        self.beginSignInTrace()
+        self.setSignInStageTitle(NSLocalizedString("Authenticating Apple ID…", comment: ""))
         self.signInButton.isIndicatingActivity = true
         
         self.authenticationHandler?(emailAddress, password) { (result) in
             switch result
             {
             case .failure(ALTAppleAPIError.requiresTwoFactorAuthentication):
+                self.finishSignInTrace(outcome: .requiresTwoFactor)
                 // Ignore
                 DispatchQueue.main.async {
                     self.signInButton.isIndicatingActivity = false
+                    self.setSignInStageTitle(NSLocalizedString("Sign In", comment: ""))
                 }
                 
             case .failure(let error as NSError):
+                self.finishSignInTrace(outcome: .failed, error: error)
                 DispatchQueue.main.async {
                     let diagnosticError = self.diagnosticAuthenticationError(from: error)
                     let toastView = ToastView(error: diagnosticError)
@@ -275,9 +371,11 @@ private extension AuthenticationViewController
                     self.toastView = toastView
                     
                     self.signInButton.isIndicatingActivity = false
+                    self.setSignInStageTitle(NSLocalizedString("Sign In", comment: ""))
                 }
                 
             case .success((let account, let session)):
+                self.finishSignInTrace(outcome: .succeeded)
                 DispatchQueue.main.async {
                     UIView.performWithoutAnimation {
                         let title = NSLocalizedString("Authenticated", comment: "")
