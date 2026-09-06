@@ -8,9 +8,28 @@
 
 import SwiftUI
 import Minimuxer
+import Foundation
+
+private func formattedHealthDuration(_ milliseconds: Int?) -> String? {
+    guard let milliseconds else { return nil }
+    if milliseconds < 1000 {
+        return "\(milliseconds) ms"
+    }
+    return String(format: "%.2f s", Double(milliseconds) / 1000.0)
+}
 
 struct HealthCheckView: View {
     @StateObject private var viewModel = HealthCheckViewModel()
+
+    private var minimuxerSatisfied: Bool? {
+        guard let result = viewModel.minimuxerReadyResult else { return nil }
+        switch result {
+        case .success:
+            return true
+        case .failure:
+            return false
+        }
+    }
     
     var body: some View {
         List {
@@ -82,13 +101,22 @@ struct HealthCheckView: View {
                 DependencyRow(
                     title: "Device Reachability (Ping)",
                     subtitle: viewModel.pingSatisfied == nil ? "Unknown" : (viewModel.isPingSuccessful ? "Reachable" : "Unreachable"),
-                    isSatisfied: viewModel.pingSatisfied
+                    isSatisfied: viewModel.pingSatisfied,
+                    latencyMilliseconds: viewModel.pingElapsedMilliseconds
                 )
                 
                 DependencyRow(
                     title: "Pairing file",
                     subtitle: viewModel.isPairingFileVerified ? "Verified" : (viewModel.isPairingFileLoaded ? "Loaded (Connection down)" : "Unverified / Missing"),
-                    isSatisfied: viewModel.pairingSatisfied
+                    isSatisfied: viewModel.pairingSatisfied,
+                    latencyMilliseconds: viewModel.pairingElapsedMilliseconds
+                )
+
+                DependencyRow(
+                    title: "Minimuxer readiness",
+                    subtitle: "Full readiness probe",
+                    isSatisfied: minimuxerSatisfied,
+                    latencyMilliseconds: viewModel.minimuxerElapsedMilliseconds
                 )
             }
             
@@ -98,8 +126,39 @@ struct HealthCheckView: View {
                     title: "Developer Disk Image (DDI)",
                     subtitle: viewModel.isDDIMounted ? "Mounted" : "Not Mounted (JIT unavailable)",
                     isSatisfied: viewModel.ddiSatisfied,
-                    isOptional: true
+                    isOptional: true,
+                    latencyMilliseconds: viewModel.ddiElapsedMilliseconds
                 )
+            }
+
+            // P0-B: expose only the safe, persisted trace written by the auth boundary.
+            Section(
+                header: Text("Last Sign-In Trace"),
+                footer: Text("Only stage timing, outcome, safe error domain/code, and non-secret 2FA mode are shown. Credentials, tokens, identifiers, and Anisette payloads are never included.")
+            ) {
+                if let trace = viewModel.lastAuthTrace, !trace.samples.isEmpty {
+                    HStack {
+                        Text("Observed total")
+                        Spacer()
+                        Text(formattedHealthDuration(trace.totalElapsedMilliseconds) ?? "N/A")
+                            .foregroundColor(.secondary)
+                            .monospacedDigit()
+                    }
+
+                    HStack {
+                        Text("Last updated")
+                        Spacer()
+                        Text(trace.updatedAt, style: .relative)
+                            .foregroundColor(.secondary)
+                    }
+
+                    ForEach(trace.samples) { sample in
+                        AuthTraceRow(sample: sample)
+                    }
+                } else {
+                    Text("No sign-in trace recorded yet.")
+                        .foregroundColor(.secondary)
+                }
             }
             
             // Section 4: Connection Configuration
@@ -138,7 +197,7 @@ struct HealthCheckView: View {
                 }
             }
             
-            // Section 4: All Active Interfaces
+            // Section 5: All Active Interfaces
             Section(header: Text("Active Network Interfaces")) {
                 if viewModel.availableInterfaces.isEmpty {
                     Text("No active interfaces scanned.")
@@ -177,6 +236,7 @@ struct DependencyRow: View {
     let subtitle: String
     let isSatisfied: Bool?
     var isOptional: Bool = false
+    var latencyMilliseconds: Int? = nil
     
     var body: some View {
         HStack {
@@ -188,6 +248,12 @@ struct DependencyRow: View {
                     .foregroundColor(.secondary)
             }
             Spacer()
+            if let duration = formattedHealthDuration(latencyMilliseconds) {
+                Text(duration)
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+                    .monospacedDigit()
+            }
             if let satisfied = isSatisfied {
                 if satisfied {
                     Image(systemName: "checkmark.circle.fill")
@@ -208,6 +274,83 @@ struct DependencyRow: View {
                     .font(.title3)
             }
         }
+    }
+}
+
+struct AuthTraceRow: View {
+    let sample: HealthCheckAuthTraceSample
+
+    private var outcomeColor: Color {
+        switch sample.outcome {
+        case "succeeded":
+            return .green
+        case "failed":
+            return .red
+        default:
+            return .secondary
+        }
+    }
+
+    private var outcomeIcon: String {
+        switch sample.outcome {
+        case "succeeded":
+            return "checkmark.circle.fill"
+        case "failed":
+            return "xmark.circle.fill"
+        default:
+            return "info.circle.fill"
+        }
+    }
+
+    private var detailText: String? {
+        if let domain = sample.errorDomain, let code = sample.errorCode {
+            return "\(domain) \(code)"
+        }
+        if let metadata = sample.metadata {
+            switch metadata {
+            case "trusted_device":
+                return "Trusted device"
+            case "sms":
+                return "SMS"
+            case "voice":
+                return "Voice"
+            default:
+                return nil
+            }
+        }
+        return nil
+    }
+
+    var body: some View {
+        HStack(alignment: .top, spacing: 10) {
+            Image(systemName: outcomeIcon)
+                .foregroundColor(outcomeColor)
+                .padding(.top, 2)
+
+            VStack(alignment: .leading, spacing: 3) {
+                Text(sample.displayName)
+                if let detailText {
+                    Text(detailText)
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                        .textSelection(.enabled)
+                }
+            }
+
+            Spacer()
+
+            if sample.outcome == "event" {
+                Text("Event")
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+            } else {
+                Text(formattedHealthDuration(sample.elapsedMilliseconds) ?? "N/A")
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+                    .monospacedDigit()
+            }
+        }
+        .padding(.vertical, 2)
     }
 }
 
