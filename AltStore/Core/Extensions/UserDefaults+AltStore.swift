@@ -73,7 +73,7 @@ public extension UserDefaults
         set { self.set(newValue, forKey: #function) }
     }
     @objc var minimuxerGatewayBackend: String {
-        get { self.string(forKey: #function) ?? GatewayBackend.idevice.rawValue }
+        get { self.string(forKey: #function) ?? GatewayBackend.libimobiledevice.rawValue }
         set { self.set(newValue, forKey: #function) }
     }
     @objc var remotePairingPortOverride: Int {
@@ -357,7 +357,7 @@ public extension UserDefaults
             #keyPath(UserDefaults._preferredAppSorting): preferredAppSorting.rawValue,
 
             // sidestore actively used
-            #keyPath(UserDefaults.minimuxerGatewayBackend): GatewayBackend.idevice.rawValue,
+            #keyPath(UserDefaults.minimuxerGatewayBackend): GatewayBackend.libimobiledevice.rawValue,
             #keyPath(UserDefaults.keepSigningCertsAfterLogout): true,
             #keyPath(UserDefaults.keepAnisetteDataAfterLogout): true,
             #keyPath(UserDefaults.isBackgroundRefreshEnabled): true,
