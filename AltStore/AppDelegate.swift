@@ -478,25 +478,35 @@ extension AppDelegate
             return
         }
 
-        let expirations = Dictionary(uniqueKeysWithValues: installedApps.map { ($0.bundleIdentifier, $0.expirationDate) })
-        _ = try? AppManager.shared.backgroundRefresh(installedApps) { result in
+        // Do not capture managed objects in an asynchronous completion that may
+        // run on a different queue. Snapshot only immutable scheduling values.
+        let targets = installedApps.map { (bundleIdentifier: $0.bundleIdentifier, expirationDate: $0.expirationDate) }
+        do {
+            _ = try AppManager.shared.backgroundRefresh(installedApps) { result in
             let now = Date()
             switch result {
             case .failure:
-                for app in installedApps {
-                    SmartAutoRefreshStateStore.shared.recordFailure(for: app.bundleIdentifier, expirationDate: app.expirationDate, now: now)
+                for target in targets {
+                    SmartAutoRefreshStateStore.shared.recordFailure(for: target.bundleIdentifier, expirationDate: target.expirationDate, now: now)
                 }
             case .success(let results):
-                for app in installedApps {
-                    switch results[app.bundleIdentifier] {
+                for target in targets {
+                    switch results[target.bundleIdentifier] {
                     case .some(.success):
-                        SmartAutoRefreshStateStore.shared.recordSuccess(for: app.bundleIdentifier, now: now)
+                        SmartAutoRefreshStateStore.shared.recordSuccess(for: target.bundleIdentifier, now: now)
                     case .some(.failure), .none:
-                        SmartAutoRefreshStateStore.shared.recordFailure(for: app.bundleIdentifier, expirationDate: expirations[app.bundleIdentifier] ?? app.expirationDate, now: now)
+                        SmartAutoRefreshStateStore.shared.recordFailure(for: target.bundleIdentifier, expirationDate: target.expirationDate, now: now)
                     }
                 }
             }
             refreshAppsCompletionHandler(result)
+            }
+        } catch {
+            let now = Date()
+            for target in targets {
+                SmartAutoRefreshStateStore.shared.recordFailure(for: target.bundleIdentifier, expirationDate: target.expirationDate, now: now)
+            }
+            refreshAppsCompletionHandler(.failure(error))
         }
     }
 }
