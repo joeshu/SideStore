@@ -139,7 +139,36 @@ def clean_spm_cache():
 # BUILD
 # ----------------------------------------------------------
 
+def apply_dependency_patches():
+    minimuxer_dir = ROOT / "Dependencies/minimuxer"
+    patch_file = ROOT / "patches/minimuxer-rppairing-initialization.patch"
+
+    if not minimuxer_dir.exists() or not patch_file.exists():
+        raise RuntimeError("Required minimuxer source or patch is missing")
+
+    already_applied = subprocess.run(
+        ["git", "-C", str(minimuxer_dir), "apply", "--reverse", "--check", str(patch_file)],
+        cwd=ROOT,
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+    )
+    if already_applied.returncode == 0:
+        return
+
+    run(f"git -C '{minimuxer_dir}' apply --check '{patch_file}'")
+    run(f"git -C '{minimuxer_dir}' apply '{patch_file}'")
+
+
+def clean_xcode_module_cache():
+    module_cache = Path.home() / "Library/Developer/Xcode/DerivedData/ModuleCache.noindex"
+    if module_cache.name != "ModuleCache.noindex":
+        raise RuntimeError("Refusing to clean an unexpected cache path")
+    subprocess.run(["rm", "-rf", str(module_cache)], cwd=ROOT, check=True)
+
+
 def build():
+    apply_dependency_patches()
+    clean_xcode_module_cache()
     run("mkdir -p build/logs")
     run(
         "set -o pipefail && "

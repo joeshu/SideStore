@@ -1,0 +1,31 @@
+diff --git a/DeviceGateway/libimobiledevice/LibimobiledeviceGateway.swift b/DeviceGateway/libimobiledevice/LibimobiledeviceGateway.swift
+index 88839f8..6f3e2af 100644
+--- a/DeviceGateway/libimobiledevice/LibimobiledeviceGateway.swift
++++ b/DeviceGateway/libimobiledevice/LibimobiledeviceGateway.swift
+@@ -124,9 +124,25 @@ public final class LibimobiledeviceGateway: BaseDeviceGateway, DeviceGatewayAPI {
+     }
+ 
+     private func verifyInitialized() throws {
+-        guard isInitialized, cachedUDID != nil else {
++        guard isInitialized else {
+             throw LibimobiledeviceGatewayError(.notInitialized)
+         }
++
++        switch pairingFileType {
++        case .rppairing:
++            // Remote Pairing files do not contain a hardware UDID. The RSD
++            // connection must be allowed to start before UniqueDeviceID can
++            // be queried from lockdownd.
++            guard rpIdentity != nil else {
++                throw LibimobiledeviceGatewayError(.notInitialized, reason: "RPPairing identity not loaded")
++            }
++        case .lockdown:
++            guard cachedUDID != nil else {
++                throw LibimobiledeviceGatewayError(.notInitialized, reason: "Lockdown UDID not loaded")
++            }
++        case .unknown:
++            throw LibimobiledeviceGatewayError(.notInitialized, reason: "Pairing protocol is unknown")
++        }
+     }
+ 
+     private func requireDeviceEndpointIp() throws -> String {

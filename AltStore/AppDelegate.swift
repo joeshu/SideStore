@@ -124,6 +124,10 @@ final class AppDelegate: UIResponder, UIApplicationDelegate {
 //        UserDefaults.dumpAllSettingsOnBoot()
         #endif
         
+        // Resolve defaults and the selected gateway before the first Minimuxer.shared access.
+        UserDefaults.registerDefaults()
+        syncMinimuxerBackendFromUserDefaults()
+
         SideStoreLogging.setLogging(UserDefaults.standard.isSideStoreVerboseLoggingEnabled)
         AltSign.setLogging(UserDefaults.standard.isAltSignVerboseLoggingEnabled)
         minimuxerSetLogging(UserDefaults.standard.isMinimuxerVerboseLoggingEnabled)
@@ -131,10 +135,6 @@ final class AppDelegate: UIResponder, UIApplicationDelegate {
         // Override point for customization after application launch.
 //        UserDefaults.standard.setValue(true, forKey: "com.apple.CoreData.MigrationDebug")
 //        UserDefaults.standard.setValue(true, forKey: "com.apple.CoreData.SQLDebug")
-
-        // Register default settings before doing anything else.
-        UserDefaults.registerDefaults()
-        syncMinimuxerBackendFromUserDefaults()
         
         // Perform one-time maintenance tasks (e.g. Keychain clearance for 0.6.4*) before initializing services
         MaintenanceManager.shared.performMaintenanceIfNeeded()

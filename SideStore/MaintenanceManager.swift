@@ -39,10 +39,10 @@ public final class MaintenanceManager {
 
         let currentVersion = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? ""
 
-        // Check if 0.6.4* maintenance has been completed for this counter
+        // Preserve account credentials across embedded SideStore upgrades. A pairing
+        // migration must never clear unrelated Apple authentication state.
         if completedCounter < Self.currentMaintenanceCounter && currentVersion.hasPrefix("0.6.4") {
-            debugLog("[MaintenanceManager] Performing one-time Keychain reset for version \(currentVersion) (counter: \(Self.currentMaintenanceCounter))...")
-            Keychain.shared.clearAll()
+            debugLog("[MaintenanceManager] Marking maintenance complete without modifying Keychain.")
 
             let counterString = "\(Self.currentMaintenanceCounter)"
             do {
