@@ -7,6 +7,8 @@
 
 import Foundation
 import Minimuxer
+import MinimuxerCommon
+import DeviceGatewayAPI
 
 extension DeviceGatewayAPI {
     /// Compatibility accessor for SideStore call sites that still use the former API name.
