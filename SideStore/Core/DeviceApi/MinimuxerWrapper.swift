@@ -10,12 +10,21 @@ import Network
 import Minimuxer
 import Combine
 
-public var selectedGatewayBackendCache: GatewayBackend = .idevice
+private let remotePairingBackendMigrationKey = "SideStoreRemotePairingBackendMigrationV1"
+
+public var selectedGatewayBackendCache: GatewayBackend = .libimobiledevice
 public var remotePairingPortCache: UInt16 = MinimuxerConstants.remotePairingPort
 
 public func syncMinimuxerBackendFromUserDefaults() {
-    let raw = UserDefaults.standard.minimuxerGatewayBackend
-    selectedGatewayBackendCache = GatewayBackend(rawValue: raw) ?? .idevice
+    let defaults = UserDefaults.standard
+    if !defaults.bool(forKey: remotePairingBackendMigrationKey) {
+        defaults.set(GatewayBackend.libimobiledevice.rawValue, forKey: "minimuxerGatewayBackend")
+        defaults.set(true, forKey: remotePairingBackendMigrationKey)
+        debugLog("[SideStore] migrated Remote Pairing backend to libimobiledevice")
+    }
+
+    let raw = defaults.minimuxerGatewayBackend
+    selectedGatewayBackendCache = GatewayBackend(rawValue: raw) ?? .libimobiledevice
 
     let overridePort = UserDefaults.standard.remotePairingPortOverride
     if overridePort > 0 && overridePort <= 65535 {
@@ -266,6 +275,22 @@ func installAppBundle(_ bundleId: String, appName: String) async throws {
     #endif
 }
 
+private func fetchHardwareUDID() async throws -> String? {
+    if minimuxer.gateway.pairingFileType == .rppairing {
+        do {
+            if let direct = try await minimuxer.gateway.getLockdownValue(key: "UniqueDeviceID"),
+               !direct.isEmpty {
+                debugLog("[SideStore] fetchUDID direct RSD lookup succeeded")
+                return direct
+            }
+            debugLog("[SideStore] fetchUDID direct RSD lookup returned no value")
+        } catch {
+            debugLog("[SideStore] fetchUDID direct RSD lookup failed; using gateway fallback")
+        }
+    }
+    return try await minimuxer.core.fetchUDID()
+}
+
 @discardableResult
 func fetchUDID(useStatic: Bool = false) async throws -> String? {
     defer { debugLog("[SideStore] fetchUDID() completed") }
@@ -275,7 +300,7 @@ func fetchUDID(useStatic: Bool = false) async throws -> String? {
     #else
     debugLog("[SideStore] fetchUDID() invoked")
     let result = try? await withRemotePairingRetry {
-        try await minimuxer.core.fetchUDID()
+        try await fetchHardwareUDID()
     }
     if let udid = result ?? nil, !udid.isEmpty, udid != "XXXXX-XXXX-XXXXX-XXXX" {
         return udid
