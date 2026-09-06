@@ -368,6 +368,7 @@ extension AppDelegate
 {
     private func prepareForBackgroundFetch()
     {
+        UIApplication.shared.setMinimumBackgroundFetchInterval(3 * 60 * 60)
         UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .badge, .sound]) { (success, error) in
             // no-op
         }
@@ -470,8 +471,33 @@ extension AppDelegate
         guard UserDefaults.standard.isBackgroundRefreshEnabled else { return }
         
         let context = DatabaseManager.shared.persistentContainer.newBackgroundContext()
-        let installedApps = InstalledApp.fetchAppsForBackgroundRefresh(in: context)
-        _ = try? AppManager.shared.backgroundRefresh(installedApps, completionHandler: refreshAppsCompletionHandler)
+        let installedApps = InstalledApp.fetchAppsForSmartBackgroundRefresh(in: context)
+        guard !installedApps.isEmpty else {
+            debugLog("[SmartAutoRefresh] No app is currently eligible")
+            refreshAppsCompletionHandler(.success([:]))
+            return
+        }
+
+        let expirations = Dictionary(uniqueKeysWithValues: installedApps.map { ($0.bundleIdentifier, $0.expirationDate) })
+        _ = try? AppManager.shared.backgroundRefresh(installedApps) { result in
+            let now = Date()
+            switch result {
+            case .failure:
+                for app in installedApps {
+                    SmartAutoRefreshStateStore.shared.recordFailure(for: app.bundleIdentifier, expirationDate: app.expirationDate, now: now)
+                }
+            case .success(let results):
+                for app in installedApps {
+                    switch results[app.bundleIdentifier] {
+                    case .some(.success):
+                        SmartAutoRefreshStateStore.shared.recordSuccess(for: app.bundleIdentifier, now: now)
+                    case .some(.failure), .none:
+                        SmartAutoRefreshStateStore.shared.recordFailure(for: app.bundleIdentifier, expirationDate: expirations[app.bundleIdentifier] ?? app.expirationDate, now: now)
+                    }
+                }
+            }
+            refreshAppsCompletionHandler(result)
+        }
     }
 }
 
