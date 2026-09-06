@@ -23,9 +23,12 @@ final class PairingFileManager: NSObject {
         }
         do {
             let pairing = try PairingFileParser.parse(content: contents)
-            if let remotePairing = pairing as? RPPairingFile {
-                debugLog("[PairingFile] pairingUDID: using Remote Pairing identifier")
-                return remotePairing.identifier
+            if pairing is RPPairingFile {
+                // A Remote Pairing file's `identifier` is the pairing/session identity,
+                // not the device hardware UDID. The real UDID must be queried from
+                // lockdownd over the established RSD connection via fetchUDID().
+                debugLog("[PairingFile] pairingUDID: Remote Pairing file has no static hardware UDID; use live device lookup")
+                return nil
             }
             if let lockdown = pairing as? LockdownPairingFile {
                 return lockdown.udid
