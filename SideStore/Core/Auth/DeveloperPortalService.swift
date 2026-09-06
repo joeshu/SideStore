@@ -151,7 +151,7 @@ public class DeveloperPortalService {
     }
     
     public func fetchDevices(for team: ALTTeam, types: ALTDeviceType, session: ALTAppleAPISession) async throws -> [ALTDevice] {
-        try await ALTAppleAPI.shared.fetchDevices(for: account, types: types, session: session)
+        try await ALTAppleAPI.shared.fetchDevices(for: team, types: types, session: session)
     }
     
     public func registerDevice(name: String, identifier: String, type: ALTDeviceType, team: ALTTeam, session: ALTAppleAPISession) async throws -> ALTDevice {
