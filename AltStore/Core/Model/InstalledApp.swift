@@ -396,7 +396,7 @@ public extension InstalledApp
         return installedApps
     }
 
-    class func fetchAppsForSmartBackgroundRefresh(in context: NSManagedObjectContext, now: Date = Date(), stateStore: SmartAutoRefreshStateStore = .shared) -> [InstalledApp]
+    internal class func fetchAppsForSmartBackgroundRefresh(in context: NSManagedObjectContext, now: Date = Date(), stateStore: SmartAutoRefreshStateStore = .shared) -> [InstalledApp]
     {
         let candidates = fetchAppsForRefreshingAll(in: context)
         stateStore.removeStaleEntries(keeping: Set(candidates.map(\.bundleIdentifier)))
