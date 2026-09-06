@@ -13,6 +13,105 @@ private let sideStoreAuthStageKey = "SideStoreAuthStage"
 private let sideStoreAuthOriginalDomainKey = "SideStoreAuthOriginalDomain"
 private let sideStoreAuthOriginalCodeKey = "SideStoreAuthOriginalCode"
 
+private struct AuthSubstageSample: Codable {
+    enum Outcome: String, Codable {
+        case event
+        case succeeded
+        case failed
+    }
+
+    let stage: String
+    let startedAt: Date
+    let completedAt: Date
+    let elapsedMilliseconds: Int
+    let outcome: Outcome
+    let errorDomain: String?
+    let errorCode: Int?
+    let metadata: String?
+}
+
+private struct AuthSubstageTrace: Codable {
+    let version: Int
+    let updatedAt: Date
+    let samples: [AuthSubstageSample]
+}
+
+private final class AuthSubstageTraceStore {
+    static let shared = AuthSubstageTraceStore()
+    static let defaultsKey = "SideStoreLastAuthSubstageTrace"
+
+    private let lock = NSLock()
+    private var samples: [AuthSubstageSample] = []
+
+    private init() {}
+
+    func reset() {
+        self.lock.lock()
+        defer { self.lock.unlock() }
+        self.samples = []
+        self.persistLocked()
+    }
+
+    func markEvent(_ stage: String, metadata: String? = nil) {
+        let now = Date()
+        let sample = AuthSubstageSample(
+            stage: stage,
+            startedAt: now,
+            completedAt: now,
+            elapsedMilliseconds: 0,
+            outcome: .event,
+            errorDomain: nil,
+            errorCode: nil,
+            metadata: metadata
+        )
+        self.append(sample)
+        debugLog("[AuthTrace] stage=\(stage) event metadata=\(metadata ?? "none")")
+    }
+
+    func begin(_ stage: String) -> Date {
+        let startedAt = Date()
+        debugLog("[AuthTrace] stage=\(stage) start")
+        return startedAt
+    }
+
+    func finish(_ stage: String, startedAt: Date, error: NSError? = nil) {
+        let completedAt = Date()
+        let elapsedMilliseconds = max(0, Int(completedAt.timeIntervalSince(startedAt) * 1000))
+        let sample = AuthSubstageSample(
+            stage: stage,
+            startedAt: startedAt,
+            completedAt: completedAt,
+            elapsedMilliseconds: elapsedMilliseconds,
+            outcome: error == nil ? .succeeded : .failed,
+            errorDomain: error?.domain,
+            errorCode: error?.code,
+            metadata: nil
+        )
+        self.append(sample)
+        debugLog(
+            "[AuthTrace] stage=\(stage) outcome=\(sample.outcome.rawValue) elapsedMs=\(elapsedMilliseconds) domain=\(error?.domain ?? "none") code=\(error?.code ?? 0)"
+        )
+    }
+
+    private func append(_ sample: AuthSubstageSample) {
+        self.lock.lock()
+        defer { self.lock.unlock() }
+        self.samples.append(sample)
+        self.persistLocked()
+    }
+
+    private func persistLocked() {
+        let trace = AuthSubstageTrace(version: 1, updatedAt: Date(), samples: self.samples)
+        do {
+            let data = try JSONEncoder().encode(trace)
+            UserDefaults.standard.set(data, forKey: Self.defaultsKey)
+        } catch {
+            let nsError = error as NSError
+            debugLog("[AuthTrace] persist failure domain=\(nsError.domain) code=\(nsError.code)")
+        }
+    }
+}
+
 private func stagedAuthError(_ error: Error, stage: String) -> NSError {
     let nsError = error as NSError
     var userInfo = nsError.userInfo
@@ -52,7 +151,7 @@ public class DeveloperPortalService {
     }
     
     public func fetchDevices(for team: ALTTeam, types: ALTDeviceType, session: ALTAppleAPISession) async throws -> [ALTDevice] {
-        try await ALTAppleAPI.shared.fetchDevices(for: team, types: types, session: session)
+        try await ALTAppleAPI.shared.fetchDevices(for: account, types: types, session: session)
     }
     
     public func registerDevice(name: String, identifier: String, type: ALTDeviceType, team: ALTTeam, session: ALTAppleAPISession) async throws -> ALTDevice {
@@ -126,21 +225,29 @@ class DeveloperPortalAuthService: DeveloperPortalService {
     }
 
     func fetchAccount(session: ALTAppleAPISession) async throws -> ALTAccount {
+        let startedAt = AuthSubstageTraceStore.shared.begin("developer_portal_account")
         debugLog("[AuthStage] developer_portal_account start")
         do {
             let account = try await ALTAppleAPI.shared.fetchAccount(session: session)
+            AuthSubstageTraceStore.shared.finish("developer_portal_account", startedAt: startedAt)
             debugLog("[AuthStage] developer_portal_account success")
             return account
         } catch {
             let nsError = error as NSError
+            AuthSubstageTraceStore.shared.finish("developer_portal_account", startedAt: startedAt, error: nsError)
             debugLog("[AuthStage] developer_portal_account failure domain=\(nsError.domain) code=\(nsError.code)")
             throw stagedAuthError(error, stage: "developer_portal_account")
         }
     }
 
     func authenticate(appleID: String, password: String, anisetteData: ALTAnisetteData, xcodeVersion: String, verificationHandler: DeveloperPortal.VerificationHandler?) async throws -> (ALTAccount, ALTAppleAPISession) {
-        // Reaching this boundary means Anisette data was obtained successfully and
-        // subsequent failures are within the Apple GSA/SRP authentication stage.
+        // Reaching this boundary proves Anisette data is already available. The SideSign
+        // authenticate call below includes GSA/SRP, optional 2FA, token acquisition and
+        // its internal account fetch, so we record that real boundary as apple_authenticate
+        // rather than inventing narrower successful timings that SideSign does not expose.
+        AuthSubstageTraceStore.shared.reset()
+        AuthSubstageTraceStore.shared.markEvent("anisette_ready")
+        let startedAt = AuthSubstageTraceStore.shared.begin("apple_authenticate")
         debugLog("[AuthStage] anisette success; gsa_srp start")
 
         let stagedVerificationHandler: DeveloperPortal.VerificationHandler? = verificationHandler.map { originalHandler in
@@ -154,6 +261,7 @@ class DeveloperPortalAuthService: DeveloperPortalService {
                 case .voice:
                     modeName = "voice"
                 }
+                AuthSubstageTraceStore.shared.markEvent("two_factor_requested", metadata: modeName)
                 debugLog("[AuthStage] two_factor requested mode=\(modeName)")
                 originalHandler(mode, completionHandler)
             }
@@ -167,20 +275,33 @@ class DeveloperPortalAuthService: DeveloperPortalService {
                 xcodeVersion: xcodeVersion,
                 verificationHandler: stagedVerificationHandler
             )
+            AuthSubstageTraceStore.shared.finish("apple_authenticate", startedAt: startedAt)
             debugLog("[AuthStage] gsa_srp success")
             return (authSession.account, authSession.session)
         } catch {
             let nsError = error as NSError
+            AuthSubstageTraceStore.shared.finish("apple_authenticate", startedAt: startedAt, error: nsError)
             debugLog("[AuthStage] gsa_srp failure domain=\(nsError.domain) code=\(nsError.code)")
             throw stagedAuthError(error, stage: "gsa_srp")
         }
     }
     
     func authenticateWithToken(adsid: String, xcodeToken: String, anisetteData: ALTAnisetteData, xcodeVersion: String) async throws -> (ALTAccount, ALTAppleAPISession) {
+        AuthSubstageTraceStore.shared.reset()
+        AuthSubstageTraceStore.shared.markEvent("anisette_ready")
+        let startedAt = AuthSubstageTraceStore.shared.begin("token_session")
         debugLog("[AuthStage] token_session start")
-        let session = ALTAppleAPISession(dsid: adsid, authToken: xcodeToken, anisetteData: anisetteData, xcodeVersion: xcodeVersion)
-        let account = try await fetchAccount(session: session)
-        debugLog("[AuthStage] token_session success")
-        return (account, session)
+        do {
+            let session = ALTAppleAPISession(dsid: adsid, authToken: xcodeToken, anisetteData: anisetteData, xcodeVersion: xcodeVersion)
+            let account = try await fetchAccount(session: session)
+            AuthSubstageTraceStore.shared.finish("token_session", startedAt: startedAt)
+            debugLog("[AuthStage] token_session success")
+            return (account, session)
+        } catch {
+            let nsError = error as NSError
+            AuthSubstageTraceStore.shared.finish("token_session", startedAt: startedAt, error: nsError)
+            debugLog("[AuthStage] token_session failure domain=\(nsError.domain) code=\(nsError.code)")
+            throw error
+        }
     }
 }
