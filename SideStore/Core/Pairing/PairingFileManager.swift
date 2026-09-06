@@ -23,11 +23,15 @@ final class PairingFileManager: NSObject {
         }
         do {
             let pairing = try PairingFileParser.parse(content: contents)
-            guard let lockdown = pairing as? LockdownPairingFile else {
-                debugLog("[PairingFile] pairingUDID: Remote Pairing files do not contain a hardware UDID")
-                return nil
+            if let remotePairing = pairing as? RPPairingFile {
+                debugLog("[PairingFile] pairingUDID: using Remote Pairing identifier")
+                return remotePairing.identifier
             }
-            return lockdown.udid
+            if let lockdown = pairing as? LockdownPairingFile {
+                return lockdown.udid
+            }
+            debugLog("[PairingFile] pairingUDID: unsupported pairing file type")
+            return nil
         } catch {
             debugLog("[PairingFile] pairingUDID: failed to parse pairing file: \(error)")
             return nil
