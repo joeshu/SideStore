@@ -199,7 +199,7 @@ final class HealthCheckViewModel: ObservableObject {
         let ddiElapsedMilliseconds = elapsedMilliseconds(since: ddiStartedAt)
 
         let pairingStartedAt = Date()
-        let pairingVerified = (try? await minimuxer.core.fetchUDID() != nil) ?? false
+        let pairingVerified = (try? await fetchUDID() != nil) ?? false
         let pairingElapsedMilliseconds = elapsedMilliseconds(since: pairingStartedAt)
 
         let isRpPairing = minimuxer.core.isrppairing
