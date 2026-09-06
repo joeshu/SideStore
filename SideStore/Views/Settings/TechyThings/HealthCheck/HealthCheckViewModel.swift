@@ -24,6 +24,59 @@ import Combine
  | .failure(.muxerNotListening)             | Satisfied | Satisfied | Satisfied | Satisfied | Satisfied | Satisfied |
  */
 
+struct HealthCheckAuthTraceSample: Identifiable {
+    let id = UUID()
+    let stage: String
+    let startedAt: Date
+    let completedAt: Date
+    let elapsedMilliseconds: Int
+    let outcome: String
+    let errorDomain: String?
+    let errorCode: Int?
+    let metadata: String?
+
+    var displayName: String {
+        switch stage {
+        case "anisette_ready":
+            return "Anisette Ready"
+        case "apple_authenticate":
+            return "Apple Authentication"
+        case "two_factor_requested":
+            return "Two-Factor Authentication"
+        case "developer_portal_account":
+            return "Developer Portal Account"
+        case "token_session":
+            return "Token Session"
+        default:
+            return "Authentication Stage"
+        }
+    }
+}
+
+struct HealthCheckAuthTrace {
+    let version: Int
+    let updatedAt: Date
+    let samples: [HealthCheckAuthTraceSample]
+    let totalElapsedMilliseconds: Int
+}
+
+private struct PersistedAuthTraceSample: Codable {
+    let stage: String
+    let startedAt: Date
+    let completedAt: Date
+    let elapsedMilliseconds: Int
+    let outcome: String
+    let errorDomain: String?
+    let errorCode: Int?
+    let metadata: String?
+}
+
+private struct PersistedAuthTrace: Codable {
+    let version: Int
+    let updatedAt: Date
+    let samples: [PersistedAuthTraceSample]
+}
+
 @MainActor
 final class HealthCheckViewModel: ObservableObject {
     @Published var isWifiSatisfied = false
@@ -61,6 +114,17 @@ final class HealthCheckViewModel: ObservableObject {
     @Published var minimuxerReadyResult: Result<Bool, MinimuxerError>? = nil
     @Published var availableInterfaces: [LocalInterfaceInfo] = []
 
+    // P0-B Health Check 2.0: these are measured around the real diagnostic calls.
+    // Instantaneous state reads (for example Wi-Fi/utun flags) intentionally have no
+    // latency value because presenting one would imply a network probe that did not run.
+    @Published var pingElapsedMilliseconds: Int? = nil
+    @Published var pairingElapsedMilliseconds: Int? = nil
+    @Published var ddiElapsedMilliseconds: Int? = nil
+    @Published var minimuxerElapsedMilliseconds: Int? = nil
+    @Published var lastAuthTrace: HealthCheckAuthTrace? = nil
+
+    private static let lastAuthTraceDefaultsKey = "SideStoreLastAuthSubstageTrace"
+
     struct HealthCheckMetrics {
         let connectionMode: DeviceConnectionMode
         let wifi: Bool
@@ -85,9 +149,18 @@ final class HealthCheckViewModel: ObservableObject {
         let isPairingLoaded: Bool
         let readyResult: Result<Bool, MinimuxerError>
         let scanned: [LocalInterfaceInfo]
+        let pingElapsedMilliseconds: Int
+        let pairingElapsedMilliseconds: Int
+        let ddiElapsedMilliseconds: Int
+        let minimuxerElapsedMilliseconds: Int
     }
 
     nonisolated private func fetchMetrics() async -> HealthCheckMetrics {
+        @inline(__always)
+        func elapsedMilliseconds(since start: Date) -> Int {
+            max(0, Int(Date().timeIntervalSince(start) * 1000))
+        }
+
         let mode = await minimuxer.core.getConnectionMode()
         let wifi = minimuxer.network.isWifiSatisfied
         let wired = minimuxer.network.isWiredSatisfied
@@ -117,13 +190,24 @@ final class HealthCheckViewModel: ObservableObject {
         }
         
         let targetIp = mode == .localVPN ? (overrideTunnelPeerEffective ? overrideTunnelPeerIp : (ConnectionConfig.shared.tunnelPeerIp ?? "")) : remoteServerIp
+        let pingStartedAt = Date()
         let pingSuccess = !targetIp.isEmpty && minimuxer.core.testDeviceConnection(ifaddr: targetIp)
+        let pingElapsedMilliseconds = elapsedMilliseconds(since: pingStartedAt)
         
+        let ddiStartedAt = Date()
         let ddi = (try? await minimuxer.core.isDDIMounted()) ?? false
+        let ddiElapsedMilliseconds = elapsedMilliseconds(since: ddiStartedAt)
+
+        let pairingStartedAt = Date()
         let pairingVerified = (try? await minimuxer.core.fetchUDID() != nil) ?? false
+        let pairingElapsedMilliseconds = elapsedMilliseconds(since: pairingStartedAt)
+
         let isRpPairing = minimuxer.core.isrppairing
         let isPairingLoaded = minimuxer.core.isPairingFileLoaded
+
+        let minimuxerStartedAt = Date()
         let readyResult = await minimuxer.core.isReady(withDDIMountCheck: true)
+        let minimuxerElapsedMilliseconds = elapsedMilliseconds(since: minimuxerStartedAt)
         let scanned = minimuxer.network.activeInterfaces
         
         return HealthCheckMetrics(
@@ -134,11 +218,17 @@ final class HealthCheckViewModel: ObservableObject {
             remoteServerIp: remoteServerIp, remotePeerIp: remotePeerIp, remoteReachable: remoteReachable,
             protocolStr: protocolStr, pingSuccess: pingSuccess,
             ddi: ddi, pairingVerified: pairingVerified, isRpPairing: isRpPairing, isPairingLoaded: isPairingLoaded,
-            readyResult: readyResult, scanned: scanned
+            readyResult: readyResult, scanned: scanned,
+            pingElapsedMilliseconds: pingElapsedMilliseconds,
+            pairingElapsedMilliseconds: pairingElapsedMilliseconds,
+            ddiElapsedMilliseconds: ddiElapsedMilliseconds,
+            minimuxerElapsedMilliseconds: minimuxerElapsedMilliseconds
         )
     }
 
     func observeMetrics() async {
+        self.reloadLastAuthTrace()
+
         // Perform initial diagnostics load
         let initialMetrics = await self.fetchMetrics()
         let initialStatus = self.computeStatuses(initialMetrics)
@@ -277,5 +367,55 @@ final class HealthCheckViewModel: ObservableObject {
         
         self.minimuxerReadyResult = metrics.readyResult
         self.availableInterfaces = metrics.scanned
+        self.pingElapsedMilliseconds = metrics.pingElapsedMilliseconds
+        self.pairingElapsedMilliseconds = metrics.pairingElapsedMilliseconds
+        self.ddiElapsedMilliseconds = metrics.ddiElapsedMilliseconds
+        self.minimuxerElapsedMilliseconds = metrics.minimuxerElapsedMilliseconds
+    }
+
+    private func reloadLastAuthTrace() {
+        guard let data = UserDefaults.standard.data(forKey: Self.lastAuthTraceDefaultsKey),
+              let persisted = try? JSONDecoder().decode(PersistedAuthTrace.self, from: data) else {
+            self.lastAuthTrace = nil
+            return
+        }
+
+        let safeSamples = persisted.samples.map { sample in
+            let safeMetadata: String?
+            if sample.stage == "two_factor_requested",
+               let metadata = sample.metadata,
+               ["trusted_device", "sms", "voice"].contains(metadata) {
+                safeMetadata = metadata
+            } else {
+                safeMetadata = nil
+            }
+
+            return HealthCheckAuthTraceSample(
+                stage: sample.stage,
+                startedAt: sample.startedAt,
+                completedAt: sample.completedAt,
+                elapsedMilliseconds: max(0, sample.elapsedMilliseconds),
+                outcome: sample.outcome,
+                errorDomain: sample.errorDomain,
+                errorCode: sample.errorCode,
+                metadata: safeMetadata
+            )
+        }
+
+        let earliest = safeSamples.map(\.startedAt).min()
+        let latest = safeSamples.map(\.completedAt).max()
+        let totalElapsedMilliseconds: Int
+        if let earliest, let latest {
+            totalElapsedMilliseconds = max(0, Int(latest.timeIntervalSince(earliest) * 1000))
+        } else {
+            totalElapsedMilliseconds = 0
+        }
+
+        self.lastAuthTrace = HealthCheckAuthTrace(
+            version: persisted.version,
+            updatedAt: persisted.updatedAt,
+            samples: safeSamples,
+            totalElapsedMilliseconds: totalElapsedMilliseconds
+        )
     }
 }
