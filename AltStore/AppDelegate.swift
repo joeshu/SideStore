@@ -368,6 +368,7 @@ extension AppDelegate
 {
     private func prepareForBackgroundFetch()
     {
+        UIApplication.shared.setMinimumBackgroundFetchInterval(3 * 60 * 60)
         UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .badge, .sound]) { (success, error) in
             // no-op
         }
@@ -470,8 +471,43 @@ extension AppDelegate
         guard UserDefaults.standard.isBackgroundRefreshEnabled else { return }
         
         let context = DatabaseManager.shared.persistentContainer.newBackgroundContext()
-        let installedApps = InstalledApp.fetchAppsForBackgroundRefresh(in: context)
-        _ = try? AppManager.shared.backgroundRefresh(installedApps, completionHandler: refreshAppsCompletionHandler)
+        let installedApps = InstalledApp.fetchAppsForSmartBackgroundRefresh(in: context)
+        guard !installedApps.isEmpty else {
+            debugLog("[SmartAutoRefresh] No app is currently eligible")
+            refreshAppsCompletionHandler(.success([:]))
+            return
+        }
+
+        // Do not capture managed objects in an asynchronous completion that may
+        // run on a different queue. Snapshot only immutable scheduling values.
+        let targets = installedApps.map { (bundleIdentifier: $0.bundleIdentifier, expirationDate: $0.expirationDate) }
+        do {
+            _ = try AppManager.shared.backgroundRefresh(installedApps) { result in
+            let now = Date()
+            switch result {
+            case .failure:
+                for target in targets {
+                    SmartAutoRefreshStateStore.shared.recordFailure(for: target.bundleIdentifier, expirationDate: target.expirationDate, now: now)
+                }
+            case .success(let results):
+                for target in targets {
+                    switch results[target.bundleIdentifier] {
+                    case .some(.success):
+                        SmartAutoRefreshStateStore.shared.recordSuccess(for: target.bundleIdentifier, now: now)
+                    case .some(.failure), .none:
+                        SmartAutoRefreshStateStore.shared.recordFailure(for: target.bundleIdentifier, expirationDate: target.expirationDate, now: now)
+                    }
+                }
+            }
+            refreshAppsCompletionHandler(result)
+            }
+        } catch {
+            let now = Date()
+            for target in targets {
+                SmartAutoRefreshStateStore.shared.recordFailure(for: target.bundleIdentifier, expirationDate: target.expirationDate, now: now)
+            }
+            refreshAppsCompletionHandler(.failure(error))
+        }
     }
 }
 

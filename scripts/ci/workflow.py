@@ -169,6 +169,7 @@ def clean_xcode_module_cache():
 def build():
     apply_dependency_patches()
     clean_xcode_module_cache()
+    run("xcrun swiftc SideStore/Core/Operations/SmartAutoRefreshPolicy.swift scripts/ci/SmartAutoRefreshPolicySmoke/main.swift -o /tmp/smart-auto-refresh-policy-tests && /tmp/smart-auto-refresh-policy-tests")
     run("mkdir -p build/logs")
     run(
         "set -o pipefail && "
