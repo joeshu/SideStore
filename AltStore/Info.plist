@@ -16,6 +16,11 @@
 	<string>1F7D5B55-79CE-4546-A029-D4DDC4AF3B6D</string>
 	<key>CFBundleDevelopmentRegion</key>
 	<string>$(DEVELOPMENT_LANGUAGE)</string>
+	<key>CFBundleLocalizations</key>
+	<array>
+		<string>en</string>
+		<string>zh-Hans</string>
+	</array>
 	<key>CFBundleDocumentTypes</key>
 	<array>
 		<dict>

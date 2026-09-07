@@ -1,0 +1,2 @@
+"CFBundleDisplayName" = "SideStore";
+"NSLocalNetworkUsageDescription" = "SideStore 可使用本地网络访问来发现网络中的 Bonjour（mDNS）服务。核心功能不依赖此权限。";
