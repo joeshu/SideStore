@@ -47,12 +47,25 @@ final class TabBarController: UITabBarController
         
         let sourcesNavigationController = self.viewControllers![Tab.sources.rawValue] as! UINavigationController
         self.sourcesViewController = sourcesNavigationController.viewControllers.first as? SourcesViewController
+
+        // zh-Hans Localizable.strings is already bundled, but several legacy
+        // storyboard labels are not resolved through storyboard localization.
+        // Apply a scoped fallback to static interface copy only.
+        self.applySideStoreInterfaceLocalization()
+    }
+
+    override func viewDidLayoutSubviews()
+    {
+        super.viewDidLayoutSubviews()
+        self.applySideStoreInterfaceLocalization()
     }
     
     override func viewDidAppear(_ animated: Bool)
     {
         super.viewDidAppear(animated)
         debugLog("[TabBarController] viewDidAppear() — TabBarController is now visible")
+
+        self.applySideStoreInterfaceLocalization()
         
         _viewDidAppear = true
         
@@ -93,6 +106,7 @@ extension TabBarController
         }
         
         self.selectedIndex = Tab.sources.rawValue
+        self.applySideStoreInterfaceLocalization()
     }
 }
 
@@ -101,10 +115,12 @@ private extension TabBarController
     @objc func importApp(_ notification: Notification)
     {
         self.selectedIndex = Tab.myApps.rawValue
+        self.applySideStoreInterfaceLocalization()
     }
 
     @objc func openErrorLog(_ notification: Notification)
     {
         self.selectedIndex = Tab.settings.rawValue
+        self.applySideStoreInterfaceLocalization()
     }
 }
