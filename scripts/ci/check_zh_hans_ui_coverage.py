@@ -95,9 +95,14 @@ def main() -> None:
         '" App ID Remaining"',
         '" App IDs Remaining"',
         "applySideStoreInterfaceLocalization()",
+        "SideStoreLocalizationBundleMarker",
+        "Bundle(for: SideStoreLocalizationBundleMarker.self)",
     ):
         if marker not in helper:
             fail(f"runtime localization helper lost marker: {marker}")
+
+    if "Bundle.main.localizedString" in helper:
+        fail("localization helper must not read resources from host Bundle.main in embedded LiveContainer mode")
 
     tab_root = TAB_ROOT.read_text(encoding="utf-8")
     if "override func viewDidLayoutSubviews()" not in tab_root:
@@ -105,7 +110,7 @@ def main() -> None:
     if tab_root.count("applySideStoreInterfaceLocalization()") < 3:
         fail("TabBarController no longer applies the localization fallback at lifecycle/route boundaries")
 
-    print(f"[zh-Hans UI guard] PASS: {len(REQUIRED_KEYS)} device-visible keys covered")
+    print(f"[zh-Hans UI guard] PASS: {len(REQUIRED_KEYS)} device-visible keys covered with embedded-bundle isolation")
 
 
 if __name__ == "__main__":
