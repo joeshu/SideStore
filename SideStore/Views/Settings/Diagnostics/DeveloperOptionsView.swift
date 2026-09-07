@@ -86,9 +86,9 @@ struct DeveloperOptionsView: View {
                         divider
                         
                         #if !os(tvOS)
-                        let title = "Widget Verbose Logging"
+                        let title: LocalizedStringKey = "Widget Verbose Logging"
                         #else
-                        let title = "Top Shelf Verbose Logging"
+                        let title: LocalizedStringKey = "Top Shelf Verbose Logging"
                         #endif
                         toggleRow(title: title, isOn: Binding(
                             get: { isAltWidgetVerboseLoggingEnabled },
@@ -179,9 +179,9 @@ struct DeveloperOptionsView: View {
                 // Section: Widget Options
                 VStack(alignment: .leading, spacing: 8) {
                     #if !os(tvOS)
-                    let title = "WIDGET OPTIONS"
+                    let title: LocalizedStringKey = "WIDGET OPTIONS"
                     #else
-                    let title = "TOP SHELF OPTIONS"
+                    let title: LocalizedStringKey = "TOP SHELF OPTIONS"
                     #endif
                     Text(title)
                         .font(.system(size: 13, weight: .semibold))
@@ -196,9 +196,9 @@ struct DeveloperOptionsView: View {
                                     .foregroundColor(.white)
 
                                 #if !os(tvOS)
-                                let title = "Reload All Widgets"
+                                let title: LocalizedStringKey = "Reload All Widgets"
                                 #else
-                                let title = "Reload Top Shelf"
+                                let title: LocalizedStringKey = "Reload Top Shelf"
                                 #endif
                                 Text(title)
                                     .font(.system(size: 17, weight: .bold))
@@ -218,9 +218,9 @@ struct DeveloperOptionsView: View {
                                     .foregroundColor(.white)
                                 
                                 #if !os(tvOS)
-                                let title = "Rotate Widget Log"
+                                let title: LocalizedStringKey = "Rotate Widget Log"
                                 #else
-                                let title = "Rotate Top Shelf Log"
+                                let title: LocalizedStringKey = "Rotate Top Shelf Log"
                                 #endif
                                 Text(title)
                                     .font(.system(size: 17, weight: .bold))
@@ -406,7 +406,7 @@ struct DeveloperOptionsView: View {
                                AuthManager.shared.password == nil ||
                                CertificateManager.shared.activeCertificate == nil {
                                 if let top = UIApplication.shared.topViewController() {
-                                    let toastView = ToastView(text: NSLocalizedString("Failed to export account!", comment: ""), detailText: "Account not found or missing credentials.")
+                                    let toastView = ToastView(text: NSLocalizedString("Failed to export account!", comment: ""), detailText: NSLocalizedString("Account not found or missing credentials.", comment: ""))
                                     toastView.show(in: top)
                                 }
                             } else {
@@ -489,7 +489,7 @@ struct DeveloperOptionsView: View {
             do {
                 try ImportExport.importAccountJSON(from: url)
                 let email = AuthManager.shared.currentAppleID ?? ""
-                let toastView = ToastView(text: NSLocalizedString("Successfully imported '\(email)'!", comment: ""), detailText: "SideStore should be fully operational!")
+                let toastView = ToastView(text: NSLocalizedString("Successfully imported '\(email)'!", comment: ""), detailText: NSLocalizedString("SideStore should be fully operational!", comment: ""))
                 toastView.show(in: top)
             } catch {
                 let toastView = ToastView(text: NSLocalizedString("Failed to import account JSON!", comment: ""), detailText: error.localizedDescription)
@@ -501,14 +501,14 @@ struct DeveloperOptionsView: View {
         #else
         TVWebFileTransferManager.shared.startImport(
             acceptedExtensions: ["sideconf", "json"],
-            title: "Import Account",
+            title: NSLocalizedString("Import Account", comment: ""),
             presentingVC: top
         ) { selectedURL in
             guard let url = selectedURL else { return }
             do {
                 try ImportExport.importAccountJSON(from: url)
                 let email = AuthManager.shared.currentAppleID ?? ""
-                let toastView = ToastView(text: NSLocalizedString("Successfully imported '\(email)'!", comment: ""), detailText: "SideStore should be fully operational!")
+                let toastView = ToastView(text: NSLocalizedString("Successfully imported '\(email)'!", comment: ""), detailText: NSLocalizedString("SideStore should be fully operational!", comment: ""))
                 toastView.show(in: top)
             } catch {
                 let toastView = ToastView(text: NSLocalizedString("Failed to import account JSON!", comment: ""), detailText: error.localizedDescription)
@@ -521,13 +521,13 @@ struct DeveloperOptionsView: View {
     private func exportAccountJSON(password: String) {
         guard let top = UIApplication.shared.topViewController() else { return }
         guard let account = ImportExport.exportAccountJSON(password: password) else {
-            let toastView = ToastView(text: NSLocalizedString("Failed to export account!", comment: ""), detailText: "Account not found or missing credentials.")
+            let toastView = ToastView(text: NSLocalizedString("Failed to export account!", comment: ""), detailText: NSLocalizedString("Account not found or missing credentials.", comment: ""))
             toastView.show(in: top)
             return
         }
         
         guard let accountData = try? Foundation.JSONEncoder().encode(account) else {
-            let toastView = ToastView(text: NSLocalizedString("Failed to export account data!", comment: ""), detailText: "Account malformed.")
+            let toastView = ToastView(text: NSLocalizedString("Failed to export account data!", comment: ""), detailText: NSLocalizedString("Account malformed.", comment: ""))
             toastView.show(in: top)
             return
         }
@@ -539,7 +539,7 @@ struct DeveloperOptionsView: View {
             let exportVC = UIDocumentPickerViewController(forExporting: [tmpPath], asCopy: false)
             top.present(exportVC, animated: true)
             #else
-            TVWebFileTransferManager.shared.startExport(fileURL: tmpPath, title: "Export Account", presentingVC: top)
+            TVWebFileTransferManager.shared.startExport(fileURL: tmpPath, title: NSLocalizedString("Export Account", comment: ""), presentingVC: top)
             #endif
         } catch {
             let toastView = ToastView(text: NSLocalizedString("Failed to export account!", comment: ""), detailText: error.localizedDescription)
@@ -558,7 +558,7 @@ struct DeveloperOptionsView: View {
         }
     }
     
-    private func toggleRow(title: String, isOn: Binding<Bool>) -> some View {
+    private func toggleRow(title: LocalizedStringKey, isOn: Binding<Bool>) -> some View {
         HStack {
             Text(title)
                 .font(.system(size: 17, weight: .bold))
@@ -608,7 +608,7 @@ struct DeveloperOptionsView: View {
             do {
                 try await startEMProxy()
                 await MainActor.run {
-                    let toastView = ToastView(text: NSLocalizedString("Started EMProxy", comment: ""), detailText: "EMProxy loopback server is running.")
+                    let toastView = ToastView(text: NSLocalizedString("Started EMProxy", comment: ""), detailText: NSLocalizedString("EMProxy loopback server is running.", comment: ""))
                     toastView.show(in: top)
                 }
             } catch {
@@ -626,7 +626,7 @@ struct DeveloperOptionsView: View {
             do {
                 try await stopEMProxy()
                 await MainActor.run {
-                    let toastView = ToastView(text: NSLocalizedString("Stopped EMProxy", comment: ""), detailText: "EMProxy loopback server stopped.")
+                    let toastView = ToastView(text: NSLocalizedString("Stopped EMProxy", comment: ""), detailText: NSLocalizedString("EMProxy loopback server stopped.", comment: ""))
                     toastView.show(in: top)
                 }
             } catch {
@@ -642,11 +642,11 @@ struct DeveloperOptionsView: View {
         #if !os(tvOS)
         WidgetCenter.shared.reloadAllTimelines()
         let title = NSLocalizedString("Reloaded All Widgets", comment: "")
-        let detail = "Triggered timeline refresh for all widgets."
+        let detail = NSLocalizedString("Triggered timeline refresh for all widgets.", comment: "")
         #else
         NotificationCenter.default.post(name: .TVTopShelfItemsDidChange, object: nil)
         let title = NSLocalizedString("Reloaded Top Shelf", comment: "")
-        let detail = "Triggered Top Shelf refresh."
+        let detail = NSLocalizedString("Triggered Top Shelf refresh.", comment: "")
         #endif
         if let top = UIApplication.shared.topViewController() {
             let toastView = ToastView(text: title, detailText: detail)
@@ -663,10 +663,10 @@ struct DeveloperOptionsView: View {
         #endif
         do {
             if let rotatedURL = try WidgetLogManager.rotateLog() {
-                let toastView = ToastView(text: NSLocalizedString("Rotated \(logName) Log", comment: ""), detailText: "Saved to WidgetLogs/\(rotatedURL.lastPathComponent)")
+                let toastView = ToastView(text: NSLocalizedString("Rotated \(logName) Log", comment: ""), detailText: String(format: NSLocalizedString("Saved to WidgetLogs/%@", comment: ""), rotatedURL.lastPathComponent))
                 toastView.show(in: top)
             } else {
-                let toastView = ToastView(text: NSLocalizedString("\(logName) Log Empty", comment: ""), detailText: "Nothing to rotate.")
+                let toastView = ToastView(text: NSLocalizedString("\(logName) Log Empty", comment: ""), detailText: NSLocalizedString("Nothing to rotate.", comment: ""))
                 toastView.show(in: top)
             }
         } catch {
