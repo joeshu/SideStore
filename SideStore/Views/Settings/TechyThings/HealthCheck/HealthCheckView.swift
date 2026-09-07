@@ -18,6 +18,10 @@ private func formattedHealthDuration(_ milliseconds: Int?) -> String? {
     return String(format: "%.2f s", Double(milliseconds) / 1000.0)
 }
 
+private func healthLocalized(_ key: String) -> String {
+    NSLocalizedString(key, comment: "")
+}
+
 struct HealthCheckView: View {
     @StateObject private var viewModel = HealthCheckViewModel()
 
@@ -45,10 +49,10 @@ struct HealthCheckView: View {
                             Text("SideStore Ready")
                                 .font(.title2)
                                 .fontWeight(.bold)
-                            Text(viewModel.connectionMode == .localVPN
+                            Text(healthLocalized(viewModel.connectionMode == .localVPN
                                  ? "All requirements met. Local device pairing & VPN tunnel active."
                                  : "All requirements met. Local device pairing & Remote server connection active."
-                            )
+                            ))
                             .font(.subheadline)
                             .foregroundColor(.secondary)
                             .multilineTextAlignment(.center)
@@ -166,7 +170,7 @@ struct HealthCheckView: View {
                 HStack {
                     Text("Connection Mode")
                     Spacer()
-                    Text(viewModel.connectionMode == .localVPN ? "Local VPN" : "Remote Server")
+                    Text(healthLocalized(viewModel.connectionMode == .localVPN ? "Local VPN" : "Remote Server"))
                         .foregroundColor(.secondary)
                 }
                 
@@ -177,13 +181,13 @@ struct HealthCheckView: View {
                     HStack {
                         Text("Override Status")
                         Spacer()
-                        Text(viewModel.overrideTunnelPeerEffective ? "Active" : "Inactive")
+                        Text(healthLocalized(viewModel.overrideTunnelPeerEffective ? "Active" : "Inactive"))
                             .foregroundColor(viewModel.overrideTunnelPeerEffective ? .green : .secondary)
                     }
                     HStack {
                         Text("Active Protocol")
                         Spacer()
-                        Text(viewModel.activeProtocol)
+                        Text(healthLocalized(viewModel.activeProtocol))
                             .foregroundColor(.secondary)
                     }
                 } else {
@@ -191,7 +195,7 @@ struct HealthCheckView: View {
                     HStack {
                         Text("Active Protocol")
                         Spacer()
-                        Text(viewModel.activeProtocol)
+                        Text(healthLocalized(viewModel.activeProtocol))
                             .foregroundColor(.secondary)
                     }
                 }
@@ -241,9 +245,9 @@ struct DependencyRow: View {
     var body: some View {
         HStack {
             VStack(alignment: .leading, spacing: 4) {
-                Text(title)
+                Text(healthLocalized(title))
                     .font(.body)
-                Text(subtitle)
+                Text(healthLocalized(subtitle))
                     .font(.caption)
                     .foregroundColor(.secondary)
             }
@@ -309,11 +313,11 @@ struct AuthTraceRow: View {
         if let metadata = sample.metadata {
             switch metadata {
             case "trusted_device":
-                return "Trusted device"
+                return healthLocalized("Trusted device")
             case "sms":
                 return "SMS"
             case "voice":
-                return "Voice"
+                return healthLocalized("Voice")
             default:
                 return nil
             }
@@ -328,7 +332,7 @@ struct AuthTraceRow: View {
                 .padding(.top, 2)
 
             VStack(alignment: .leading, spacing: 3) {
-                Text(sample.displayName)
+                Text(healthLocalized(sample.displayName))
                 if let detailText {
                     Text(detailText)
                         .font(.caption)
@@ -360,7 +364,7 @@ struct ConfigRow: View {
     
     var body: some View {
         HStack {
-            Text(label)
+            Text(healthLocalized(label))
             Spacer()
             Text(value ?? "N/A")
                 .foregroundColor(.secondary)
