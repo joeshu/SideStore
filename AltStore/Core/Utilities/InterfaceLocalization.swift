@@ -8,8 +8,16 @@
 
 @preconcurrency import UIKit
 
+/// Bundle marker whose image lives with SideStore itself. In standalone mode
+/// this resolves to SideStore.app; when LiveContainer dylibifies SideStore into
+/// SideStoreApp.framework it resolves to that embedded framework instead of the
+/// LiveContainer host bundle.
+private final class SideStoreLocalizationBundleMarker: NSObject {}
+
 private enum InterfaceLocalization
 {
+    private static let resourceBundle = Bundle(for: SideStoreLocalizationBundleMarker.self)
+
     // Keep this intentionally scoped to static interface copy. This prevents
     // user/app-provided content from being translated merely because it happens
     // to match a localization key.
@@ -59,8 +67,10 @@ private enum InterfaceLocalization
     {
         guard let string, !string.isEmpty else { return string }
 
-        // Prefer the project's normal localization table first.
-        let standard = Bundle.main.localizedString(forKey: string, value: string, table: nil)
+        // Prefer SideStore's normal localization table first. Do not use
+        // Bundle.main here: in LiveContainer integration Bundle.main belongs to
+        // the host app while SideStore's lproj files remain in its framework.
+        let standard = resourceBundle.localizedString(forKey: string, value: string, table: nil)
         if standard != string
         {
             return standard
@@ -76,7 +86,7 @@ private enum InterfaceLocalization
                 if let count = Int(countText)
                 {
                     let key = "%d App IDs Remaining"
-                    let format = Bundle.main.localizedString(forKey: key, value: key, table: "InterfaceFallback")
+                    let format = resourceBundle.localizedString(forKey: key, value: key, table: "InterfaceFallback")
                     if format != key
                     {
                         return String(format: format, count)
@@ -86,7 +96,7 @@ private enum InterfaceLocalization
         }
 
         guard storyboardKeys.contains(string) else { return string }
-        return Bundle.main.localizedString(forKey: string, value: string, table: "InterfaceFallback")
+        return resourceBundle.localizedString(forKey: string, value: string, table: "InterfaceFallback")
     }
 
     static func localize(_ item: UIBarButtonItem?)
