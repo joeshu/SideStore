@@ -1,0 +1,57 @@
+/*
+ SideStore Simplified Chinese interface fallback.
+
+ This table is intentionally limited to static UI copy that is still emitted
+ in English by legacy storyboard/resource paths. It is consumed only by
+ InterfaceLocalization.swift and does not replace the normal Localizable table.
+*/
+
+"Settings" = "设置";
+"My Apps" = "我的 App";
+"News" = "资讯";
+"Sources" = "来源";
+
+"Name" = "姓名";
+"Email" = "邮箱";
+"Type" = "类型";
+
+"Support the team" = "支持团队";
+"Support the SideStore Team" = "支持 SideStore 团队";
+"Support the SideStore Team by following our socials or becoming a patron!" = "关注我们的社交账号或成为赞助者，以支持 SideStore 团队！";
+
+"Change App Icon" = "更改 App 图标";
+"Personalize your SideStore experience by choosing an alternate app icon." = "选择其他 App 图标，个性化你的 SideStore 体验。";
+
+"Background Refresh" = "后台刷新";
+"Disable Idle Timeout" = "禁用空闲超时";
+
+"Storage Explorer" = "存储空间管理";
+"Clear Data Cache..." = "清除数据缓存…";
+"Free up disk space by removing non-essential data, such as temporary files and backups for uninstalled apps." = "移除临时文件和已卸载 App 的备份等非必要数据，以释放存储空间。";
+
+"CREDITS" = "致谢";
+"Developers" = "开发者";
+"UI Designer" = "UI 设计";
+"Asset Designer" = "资源设计";
+"Licenses" = "许可证";
+
+"Enable Beta Updates" = "启用测试版更新";
+"Beta Updates Track" = "测试版更新通道";
+"Opt in for beta testing to receive regular updates and early previews of upcoming releases." = "加入测试版计划，定期接收更新并提前体验即将发布的版本。";
+"Please note that these builds are experimental and may be unstable or break unexpectedly." = "请注意，这些构建为实验版本，可能不稳定或出现意外故障。";
+
+"View Refresh Attempts" = "查看刷新记录";
+"SideJITServer" = "SideJITServer";
+"Reset Pairing File" = "重置配对文件";
+"Anisette Servers" = "Anisette 服务器";
+"Connection Config" = "连接配置";
+"Developer Portal Services" = "开发者门户服务";
+"Certificate Management" = "证书管理";
+"Backup & Restore" = "备份与恢复";
+"User Customizations" = "用户自定义";
+"Developer Options" = "开发者选项";
+"Experimental Features" = "实验性功能";
+
+"View App IDs" = "查看 App ID";
+"Refresh App ID cache" = "刷新 App ID 缓存";
+"%d App IDs Remaining" = "剩余 %d 个 App ID";
