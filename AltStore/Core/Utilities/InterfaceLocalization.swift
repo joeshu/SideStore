@@ -23,17 +23,23 @@ private enum InterfaceLocalization
         "Type",
         "Support the team",
         "Support the SideStore Team",
+        "Support the SideStore Team by following our socials or becoming a patron!",
         "Change App Icon",
+        "Personalize your SideStore experience by choosing an alternate app icon.",
         "Background Refresh",
         "Disable Idle Timeout",
         "Storage Explorer",
         "Clear Data Cache...",
+        "Free up disk space by removing non-essential data, such as temporary files and backups for uninstalled apps.",
+        "CREDITS",
         "Developers",
         "UI Designer",
         "Asset Designer",
         "Licenses",
         "Enable Beta Updates",
         "Beta Updates Track",
+        "Opt in for beta testing to receive regular updates and early previews of upcoming releases.",
+        "Please note that these builds are experimental and may be unstable or break unexpectedly.",
         "View Refresh Attempts",
         "SideJITServer",
         "Reset Pairing File",
@@ -45,16 +51,42 @@ private enum InterfaceLocalization
         "User Customizations",
         "Developer Options",
         "Experimental Features",
-        "View App IDs"
+        "View App IDs",
+        "Refresh App ID cache"
     ]
 
     static func localized(_ string: String?) -> String?
     {
-        guard let string, !string.isEmpty, storyboardKeys.contains(string) else {
-            return string
+        guard let string, !string.isEmpty else { return string }
+
+        // Prefer the project's normal localization table first.
+        let standard = Bundle.main.localizedString(forKey: string, value: string, table: nil)
+        if standard != string
+        {
+            return standard
         }
 
-        return Bundle.main.localizedString(forKey: string, value: string, table: nil)
+        // My Apps renders the remaining App ID count dynamically. Handle both
+        // singular and plural English output without changing model/user data.
+        for suffix in [" App ID Remaining", " App IDs Remaining"]
+        {
+            if string.hasSuffix(suffix)
+            {
+                let countText = String(string.dropLast(suffix.count))
+                if let count = Int(countText)
+                {
+                    let key = "%d App IDs Remaining"
+                    let format = Bundle.main.localizedString(forKey: key, value: key, table: "InterfaceFallback")
+                    if format != key
+                    {
+                        return String(format: format, count)
+                    }
+                }
+            }
+        }
+
+        guard storyboardKeys.contains(string) else { return string }
+        return Bundle.main.localizedString(forKey: string, value: string, table: "InterfaceFallback")
     }
 
     static func localize(_ item: UIBarButtonItem?)
