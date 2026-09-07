@@ -44,6 +44,9 @@ jobs:
         with:
           xcode-version: "26.2"
 
+      - name: Verify Simplified Chinese localization sources
+        run: python3 scripts/ci/verify_zh_hans_localization.py
+
       - name: Restore Cache (exact)
         id: xcode-cache-exact
         uses: actions/cache/restore@v3
@@ -86,6 +89,20 @@ jobs:
           python3 scripts/ci/workflow.py encrypt-build
           mv SideStore.ipa SideStore-${{ env.MARKETING_VERSION }}.ipa
           exit $STATUS
+
+      - name: Verify zh-Hans resources in IPA
+        run: |
+          IPA="SideStore-${{ env.MARKETING_VERSION }}.ipa"
+          unzip -l "$IPA" > /tmp/ipa-files.txt
+          echo '=== zh-Hans resources packaged in IPA ==='
+          grep 'Payload/SideStore.app/zh-Hans.lproj/' /tmp/ipa-files.txt || true
+          grep -q 'Payload/SideStore.app/zh-Hans.lproj/Localizable.strings' /tmp/ipa-files.txt
+          grep -q 'Payload/SideStore.app/zh-Hans.lproj/InfoPlist.strings' /tmp/ipa-files.txt
+          COUNT=$(grep -c 'Payload/SideStore.app/zh-Hans.lproj/' /tmp/ipa-files.txt || true)
+          if [ "$COUNT" -lt 6 ]; then
+            echo "Expected at least 6 zh-Hans resources in IPA, found $COUNT"
+            exit 1
+          fi
 
       - name: Show dependency/build failure diagnostics
         if: failure()
