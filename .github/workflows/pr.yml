@@ -98,9 +98,10 @@ jobs:
           grep 'Payload/SideStore.app/zh-Hans.lproj/' /tmp/ipa-files.txt || true
           grep -q 'Payload/SideStore.app/zh-Hans.lproj/Localizable.strings' /tmp/ipa-files.txt
           grep -q 'Payload/SideStore.app/zh-Hans.lproj/InfoPlist.strings' /tmp/ipa-files.txt
+          grep -q 'Payload/SideStore.app/zh-Hans.lproj/InterfaceFallback.strings' /tmp/ipa-files.txt
           COUNT=$(grep -c 'Payload/SideStore.app/zh-Hans.lproj/' /tmp/ipa-files.txt || true)
-          if [ "$COUNT" -lt 6 ]; then
-            echo "Expected at least 6 zh-Hans resources in IPA, found $COUNT"
+          if [ "$COUNT" -lt 7 ]; then
+            echo "Expected at least 7 zh-Hans resources in IPA, found $COUNT"
             exit 1
           fi
 
