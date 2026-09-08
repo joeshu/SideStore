@@ -11,6 +11,8 @@ import Foundation
 import SideSign
 
 final class RemoveAppExtensionsOperation: BasePipelineOperation<InstallAppOperationContext, ALTApplication>, @unchecked Sendable {
+    private static let keepAppExtensionsInfoKey = "ALTKeepAppExtensions"
+
     let localAppExtensions: Set<ALTApplication>?
     
     init(context: InstallAppOperationContext, localAppExtensions: Set<ALTApplication>?) throws {
@@ -34,6 +36,21 @@ final class RemoveAppExtensionsOperation: BasePipelineOperation<InstallAppOperat
         
         // target App Bundle doesn't contain extensions so don't bother
         guard !targetAppBundle.appExtensions.isEmpty else {
+            self.setProgress(100)
+            return targetAppBundle
+        }
+
+        // Some host applications depend on their bundled extensions to function correctly.
+        // Such apps can opt out of SideStore's extension-pruning behavior by declaring
+        // ALTKeepAppExtensions = true in their Info.plist. This is intentionally checked
+        // before comparing against the currently installed app: a reinstall must be able
+        // to restore an extension that a previous install accidentally stripped.
+        //
+        // Reusing the main profile is the existing SideStore mode for preserving all
+        // extensions without consuming one App ID per extension on free developer teams.
+        if self.shouldKeepAllAppExtensions(for: targetAppBundle) {
+            self.context.useMainProfile = true
+            self.debugLog("[RemoveAppExtensionsOperation] ALTKeepAppExtensions is enabled; preserving all \(targetAppBundle.appExtensions.count) extensions and using the main profile.")
             self.setProgress(100)
             return targetAppBundle
         }
@@ -76,6 +93,19 @@ final class RemoveAppExtensionsOperation: BasePipelineOperation<InstallAppOperat
         }
         
         return targetAppBundle
+    }
+
+    private func shouldKeepAllAppExtensions(for appBundle: ALTApplication) -> Bool {
+        let infoPlistURL = appBundle.fileURL.appendingPathComponent("Info.plist")
+        guard
+            let data = try? Data(contentsOf: infoPlistURL),
+            let propertyList = try? PropertyListSerialization.propertyList(from: data, options: [], format: nil),
+            let infoDictionary = propertyList as? [String: Any]
+        else {
+            return false
+        }
+
+        return infoDictionary[Self.keepAppExtensionsInfoKey] as? Bool == true
     }
     
     private func removeExtensions(from extensions: Set<ALTApplication>, endPercent: Int64) throws {
@@ -140,7 +170,6 @@ final class RemoveAppExtensionsOperation: BasePipelineOperation<InstallAppOperat
         let excessExtensionsInTargetApp = targetAppEx.filter {
             !(existingAppExNames.contains($0.bundleIdentifier))
         }
-    
         let isMatching = (targetAppEx.count == existingAppEx.count) && excessExtensionsInTargetApp.isEmpty
         let diagnosticsMsg = "RemoveAppExtensionsOperation: App Extensions in localAppBundle and targetAppBundle are matching: \(isMatching)\n"
                             + "RemoveAppExtensionsOperation: \nlocalAppBundleEx: \(existingAppExNames); \ntargetAppBundleEx: \(String(describing: targetAppExNames))\n"
