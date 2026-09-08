@@ -458,7 +458,7 @@ private extension SettingsViewController
             }
             else
             {
-                settingsHeaderFooterView.secondaryLabel.text = NSLocalizedString("Enable Background Refresh to automatically refresh apps in the background when connected to Wi-Fi. \n\nEnable Disable Idle Timeout to allow SideStore to keep your device awake during a refresh or install of any apps.", comment: "")
+                settingsHeaderFooterView.secondaryLabel.text = NSLocalizedString("Apps refresh automatically on Wi-Fi. Use Disable Idle Timeout only when a refresh or install must keep the device awake.", comment: "")
             }
             
         case .display:
@@ -468,7 +468,11 @@ private extension SettingsViewController
             }
             else
             {
-                settingsHeaderFooterView.secondaryLabel.text = NSLocalizedString("Personalize the app icon. To switch Chinese or English, open iOS Settings > Apps > SideStore > Language, then reopen SideStore.", comment: "")
+                settingsHeaderFooterView.secondaryLabel.text = NSLocalizedString("Change the app icon or open system settings to change the app language.", comment: "")
+                settingsHeaderFooterView.button.setTitle(NSLocalizedString("Change Language", comment: ""), for: .normal)
+                settingsHeaderFooterView.button.removeTarget(nil, action: nil, for: .primaryActionTriggered)
+                settingsHeaderFooterView.button.addTarget(self, action: #selector(SettingsViewController.openLanguageSettings(_:)), for: .primaryActionTriggered)
+                settingsHeaderFooterView.button.isHidden = false
             }
             
             
@@ -482,7 +486,7 @@ private extension SettingsViewController
             }
             else
             {
-                settingsHeaderFooterView.secondaryLabel.text = NSLocalizedString("Health Check verifies signing and network readiness; Error Log helps diagnose failures; Storage Explorer shows SideStore files; Clear Cache removes temporary data without deleting installed apps.", comment: "")
+                settingsHeaderFooterView.secondaryLabel.text = NSLocalizedString("Tools for checking status, troubleshooting failures, and managing temporary data.", comment: "")
             }
             
         case .credits:
@@ -495,7 +499,7 @@ private extension SettingsViewController
             }
             else
             {
-                settingsHeaderFooterView.secondaryLabel.text = NSLocalizedString("Feedback reports issues; Refresh Attempts shows refresh history; SideJITServer configures JIT; Pairing File repairs device communication; Anisette Servers support Apple ID authentication; Connection Configuration controls networking; Developer Portal Services manages App IDs, devices, and profiles; Certificate Management manages signing certificates; Backup & Restore protects data; User Customizations contains expert options.", comment: "")
+                settingsHeaderFooterView.secondaryLabel.text = NSLocalizedString("Advanced tools for pairing, authentication, certificates, networking, and backups. Most users can leave these unchanged.", comment: "")
             }
 
         case .betaTesting:
@@ -505,13 +509,7 @@ private extension SettingsViewController
             }
             else
             {
-                settingsHeaderFooterView.secondaryLabel.text = NSLocalizedString(
-                    """
-                    Opt in for beta testing to receive regular updates and early previews of upcoming releases.\n
-                    Please note that these builds are experimental and may be unstable or break unexpectedly.
-                    """,
-                    comment: ""
-                )
+                settingsHeaderFooterView.secondaryLabel.text = NSLocalizedString("Optional preview updates. These builds may be unstable.", comment: "")
             }
             
 
@@ -523,7 +521,7 @@ private extension SettingsViewController
             }
             else
             {
-                settingsHeaderFooterView.secondaryLabel.text = NSLocalizedString("Developer Options controls logs, database, and WireGuard tools. Experimental Features contains unstable switches intended only for troubleshooting or testing.", comment: "")
+                settingsHeaderFooterView.secondaryLabel.text = NSLocalizedString("Troubleshooting and experimental tools. Change these only when diagnosing a problem.", comment: "")
             }
             
         // case .macDirtyCow:
@@ -848,6 +846,14 @@ private extension SettingsViewController
     {
         let safariURL = URL(string: "https://github.com/SideStore")!
         UIApplication.shared.open(safariURL, options: [:])
+    }
+
+    @objc func openLanguageSettings(_ sender: Any)
+    {
+        #if !os(tvOS)
+        guard let url = URL(string: UIApplication.openSettingsURLString) else { return }
+        UIApplication.shared.open(url)
+        #endif
     }
 }
 
@@ -1257,13 +1263,115 @@ extension SettingsViewController
             }
             
             
-        // case .account, .patreon, .display, .instructions, .macDirtyCow: break
-        case .account, .patreon, .display, .instructions, .betaTesting: break
+        case .instructions:
+            let guideViewController = SettingsGuideViewController()
+            self.navigationController?.pushViewController(guideViewController, animated: true)
+
+        // case .account, .patreon, .display, .macDirtyCow: break
+        case .account, .patreon, .display, .betaTesting: break
         }
         
         
         // deselect the row before returning (so that it doesn't look like stuck selected)
         tableView.deselectRow(at: indexPath, animated: true)
+    }
+}
+
+final private class SettingsGuideViewController: UITableViewController
+{
+    private let sections: [(title: String, items: [(title: String, detail: String)])] = [
+        (
+            NSLocalizedString("Refreshing Apps", comment: ""),
+            [
+                (
+                    NSLocalizedString("Background Refresh", comment: ""),
+                    NSLocalizedString("Refresh apps automatically when the device is connected to Wi-Fi.", comment: "")
+                ),
+                (
+                    NSLocalizedString("Disable Idle Timeout", comment: ""),
+                    NSLocalizedString("Keep the device awake while SideStore refreshes or installs an app.", comment: "")
+                ),
+                (
+                    NSLocalizedString("How it works", comment: ""),
+                    NSLocalizedString("Use the switches only when needed. Keeping unnecessary background activity enabled may increase battery usage.", comment: "")
+                )
+            ]
+        ),
+        (
+            NSLocalizedString("Tools", comment: ""),
+            [
+                (
+                    NSLocalizedString("Health Check", comment: ""),
+                    NSLocalizedString("Check signing, network connectivity, pairing, and device readiness.", comment: "")
+                ),
+                (
+                    NSLocalizedString("Error Log", comment: ""),
+                    NSLocalizedString("Review diagnostic logs when an operation fails.", comment: "")
+                ),
+                (
+                    NSLocalizedString("Storage Explorer", comment: ""),
+                    NSLocalizedString("Inspect files stored by SideStore. Do not delete files unless you know what they are.", comment: "")
+                ),
+                (
+                    NSLocalizedString("Clear Data Cache…", comment: ""),
+                    NSLocalizedString("Remove temporary data. Installed apps are not deleted.", comment: "")
+                )
+            ]
+        ),
+        (
+            NSLocalizedString("Advanced Settings", comment: ""),
+            [
+                (
+                    NSLocalizedString("Advanced settings overview", comment: ""),
+                    NSLocalizedString("These options control authentication, pairing, certificates, networking, backups, and developer services. Change them only when you understand the effect.", comment: "")
+                ),
+                (
+                    NSLocalizedString("Diagnostics", comment: ""),
+                    NSLocalizedString("Developer and experimental tools are intended for troubleshooting or testing.", comment: "")
+                )
+            ]
+        )
+    ]
+
+    override func viewDidLoad()
+    {
+        super.viewDidLoad()
+        title = NSLocalizedString("How it works", comment: "")
+        tableView.backgroundColor = .settingsBackground
+        tableView.separatorStyle = .none
+        tableView.rowHeight = UITableView.automaticDimension
+        tableView.estimatedRowHeight = 78
+        tableView.register(UITableViewCell.self, forCellReuseIdentifier: "SettingsGuideCell")
+    }
+
+    override func numberOfSections(in tableView: UITableView) -> Int
+    {
+        sections.count
+    }
+
+    override func tableView(_ tableView: UITableView, numberOfRowsInSection section: Int) -> Int
+    {
+        sections[section].items.count
+    }
+
+    override func tableView(_ tableView: UITableView, titleForHeaderInSection section: Int) -> String?
+    {
+        sections[section].title
+    }
+
+    override func tableView(_ tableView: UITableView, cellForRowAt indexPath: IndexPath) -> UITableViewCell
+    {
+        let cell = tableView.dequeueReusableCell(withIdentifier: "SettingsGuideCell", for: indexPath)
+        let item = sections[indexPath.section].items[indexPath.row]
+        cell.backgroundColor = UIColor.white.withAlphaComponent(0.14)
+        cell.textLabel?.text = item.title
+        cell.textLabel?.textColor = .white
+        cell.textLabel?.font = .boldSystemFont(ofSize: 16)
+        cell.detailTextLabel?.text = item.detail
+        cell.detailTextLabel?.textColor = UIColor.white.withAlphaComponent(0.78)
+        cell.detailTextLabel?.numberOfLines = 0
+        cell.accessoryType = .none
+        return cell
     }
 }
 
