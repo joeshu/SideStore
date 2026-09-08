@@ -10,7 +10,6 @@ on:
       - '.editorconfig'
       - '.gitignore'
       - '.gitmodules'
-      - '.github/**'
 
 concurrency:
   group: pr-${{ github.event.pull_request.number }}
@@ -71,15 +70,32 @@ jobs:
           ARTIFACTS_DIR="$HOME/Library/Caches/org.swift.swiftpm/artifacts"
           mkdir -p "$ARTIFACTS_DIR"
 
+          verify_download() {
+            local file="$1"
+            local expected_sha256="$2"
+            local url="$3"
+
+            if [ -f "$file" ] && ! printf '%s  %s\n' "$expected_sha256" "$file" | shasum -a 256 -c - >/dev/null 2>&1; then
+              echo "Cached dependency checksum mismatch; removing: $file"
+              rm -f "$file"
+            fi
+            if [ ! -f "$file" ]; then
+              curl -fsSL --retry 3 "$url" -o "$file"
+            fi
+            printf '%s  %s\n' "$expected_sha256" "$file" | shasum -a 256 -c -
+          }
+
           OPENSSL_FILE="$ARTIFACTS_DIR/https___github_com_krzyzanowskim_OpenSSL_releases_download_3_6_2000_OpenSSL_xcframework_zip"
-          if [ ! -f "$OPENSSL_FILE" ]; then
-            curl -fsSL "https://github.com/krzyzanowskim/OpenSSL/releases/download/3.6.2000/OpenSSL.xcframework.zip" -o "$OPENSSL_FILE"
-          fi
+          verify_download \
+            "$OPENSSL_FILE" \
+            "37846a8bd302cb2443eff47f1045ab844d0cd40bf82cc6159cfad9aa5c3eff9e" \
+            "https://github.com/krzyzanowskim/OpenSSL/releases/download/3.6.2000/OpenSSL.xcframework.zip"
 
           UNICORN_FILE="$ARTIFACTS_DIR/https___github_com_mahee96_unicorn_releases_download_2_1_4_multiarch_Unicorn_xcframework_zip"
-          if [ ! -f "$UNICORN_FILE" ]; then
-            curl -fsSL "https://github.com/mahee96/unicorn/releases/download/2.1.4-multiarch/Unicorn.xcframework.zip" -o "$UNICORN_FILE"
-          fi
+          verify_download \
+            "$UNICORN_FILE" \
+            "4f61907db6aafc56fb3e336b524d742342312f498bb40739f1da55fb4a24614a" \
+            "https://github.com/mahee96/unicorn/releases/download/2.1.4-multiarch/Unicorn.xcframework.zip"
 
       - name: Build
         env:

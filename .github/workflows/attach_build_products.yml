@@ -4,11 +4,15 @@ on:
     workflows: [Pull Request SideStore build]
     types: [completed]
 
+permissions:
+  actions: read
+  pull-requests: write
+
 jobs:
   artifacts-url-comments:
     name: add artifact links to pull request and related issues job
     runs-on: ubuntu-latest
-    if: ${{ github.event.workflow_run.conclusion == 'success' }}
+    if: ${{ github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.event == 'pull_request' && github.event.workflow_run.pull_requests[0] != null }}
     steps:
       - name: add artifact links to pull request and related issues step
         uses: tonyhallett/artifacts-url-comments@v1.1.0
@@ -21,7 +25,7 @@ jobs:
             addTo: pull
             # addTo: pullandissues
   nightly-link-comment:
-    if: github.event.workflow_run.event == 'pull_request' && github.event.workflow_run.conclusion == 'success'
+    if: github.event.workflow_run.event == 'pull_request' && github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.pull_requests[0] != null
     runs-on: ubuntu-latest
     steps:
       - uses: actions/github-script@v6
