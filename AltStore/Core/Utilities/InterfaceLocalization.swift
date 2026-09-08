@@ -17,6 +17,22 @@ private final class SideStoreLocalizationBundleMarker: NSObject {}
 private enum InterfaceLocalization
 {
     private static let resourceBundle = Bundle(for: SideStoreLocalizationBundleMarker.self)
+    private static let languagePreferenceKey = "SideStorePreferredLanguage"
+
+    private static var activeBundle: Bundle
+    {
+        guard let languageCode = UserDefaults.standard.string(forKey: languagePreferenceKey),
+              languageCode != "en",
+              let path = resourceBundle.path(forResource: languageCode, ofType: "lproj"),
+              let bundle = Bundle(path: path) else
+        {
+            // English is the source language. Returning the framework bundle
+            // keeps base English strings intact when no explicit Chinese
+            // preference is selected.
+            return resourceBundle
+        }
+        return bundle
+    }
 
     // Keep this intentionally scoped to static interface copy. This prevents
     // user/app-provided content from being translated merely because it happens
@@ -70,7 +86,7 @@ private enum InterfaceLocalization
         // Prefer SideStore's normal localization table first. Do not use
         // Bundle.main here: in LiveContainer integration Bundle.main belongs to
         // the host app while SideStore's lproj files remain in its framework.
-        let standard = resourceBundle.localizedString(forKey: string, value: string, table: nil)
+        let standard = activeBundle.localizedString(forKey: string, value: string, table: nil)
         if standard != string
         {
             return standard
@@ -86,7 +102,7 @@ private enum InterfaceLocalization
                 if let count = Int(countText)
                 {
                     let key = "%d App IDs Remaining"
-                    let format = resourceBundle.localizedString(forKey: key, value: key, table: "InterfaceFallback")
+                    let format = activeBundle.localizedString(forKey: key, value: key, table: "InterfaceFallback")
                     if format != key
                     {
                         return String(format: format, count)
@@ -96,7 +112,7 @@ private enum InterfaceLocalization
         }
 
         guard storyboardKeys.contains(string) else { return string }
-        return resourceBundle.localizedString(forKey: string, value: string, table: "InterfaceFallback")
+        return activeBundle.localizedString(forKey: string, value: string, table: "InterfaceFallback")
     }
 
     static func localize(_ item: UIBarButtonItem?)
