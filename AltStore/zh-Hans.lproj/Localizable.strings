@@ -261,3 +261,12 @@
 "Missing" = "缺失";
 "Expired" = "已过期";
 "Unknown" = "未知";
+
+
+/* Settings guidance */
+"Personalize the app icon. To switch Chinese or English, open iOS Settings > Apps > SideStore > Language, then reopen SideStore." = "可在此更换应用图标。如需切换中文或英文，请打开“系统设置 → App → SideStore → 语言”，选择语言后重新打开 SideStore。";
+"Health Check verifies signing and network readiness; Error Log helps diagnose failures; Storage Explorer shows SideStore files; Clear Cache removes temporary data without deleting installed apps." = "“健康检查”用于确认签名与网络是否就绪；“错误日志”用于排查失败原因；“存储浏览器”用于查看 SideStore 文件；“清理缓存”只删除临时数据，不会删除已安装的 App。";
+"Feedback reports issues; Refresh Attempts shows refresh history; SideJITServer configures JIT; Pairing File repairs device communication; Anisette Servers support Apple ID authentication; Connection Configuration controls networking; Developer Portal Services manages App IDs, devices, and profiles; Certificate Management manages signing certificates; Backup & Restore protects data; User Customizations contains expert options." = "“发送反馈”用于报告问题；“刷新尝试”查看刷新记录；“SideJITServer”配置 JIT；“配对文件”用于修复设备通信；“Anisette 服务器”支持 Apple ID 认证；“连接配置”管理网络连接；“开发者门户服务”管理 App ID、设备和描述文件；“证书管理”管理签名证书；“备份与恢复”保护数据；“用户自定义”包含高级选项。";
+"Developer Options controls logs, database, and WireGuard tools. Experimental Features contains unstable switches intended only for troubleshooting or testing." = "“开发者选项”管理日志、数据库和 WireGuard 工具；“实验性功能”包含尚不稳定的开关，仅建议在排障或测试时使用。";
+"Choose a method to send feedback:" = "选择反馈方式：";
+"Send Email" = "发送邮件";
