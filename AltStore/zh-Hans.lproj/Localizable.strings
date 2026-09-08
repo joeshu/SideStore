@@ -270,3 +270,24 @@
 "Developer Options controls logs, database, and WireGuard tools. Experimental Features contains unstable switches intended only for troubleshooting or testing." = "“开发者选项”管理日志、数据库和 WireGuard 工具；“实验性功能”包含尚不稳定的开关，仅建议在排障或测试时使用。";
 "Choose a method to send feedback:" = "选择反馈方式：";
 "Send Email" = "发送邮件";
+
+/* Settings information architecture */
+"Change the app icon or open system settings to change the app language." = "更换应用图标，或打开系统设置切换应用语言。";
+"Change Language" = "切换语言";
+"Apps refresh automatically on Wi-Fi. Use Disable Idle Timeout only when a refresh or install must keep the device awake." = "连接 Wi‑Fi 时可自动刷新 App。仅在刷新或安装期间需要保持设备唤醒时，启用“禁用空闲超时”。";
+"Tools for checking status, troubleshooting failures, and managing temporary data." = "用于检查状态、排查故障和管理临时数据的工具。";
+"Advanced tools for pairing, authentication, certificates, networking, and backups. Most users can leave these unchanged." = "用于配对、认证、证书、网络和备份的高级工具。大多数用户无需修改。";
+"Optional preview updates. These builds may be unstable." = "可选的预览更新，可能存在不稳定情况。";
+"Troubleshooting and experimental tools. Change these only when diagnosing a problem." = "用于排障和测试的工具，仅在诊断问题时修改。";
+"Refreshing Apps" = "刷新 App";
+"Tools" = "工具";
+"Advanced settings overview" = "高级设置概览";
+"Keep the device awake while SideStore refreshes or installs an app." = "SideStore 刷新或安装 App 时保持设备唤醒。";
+"Refresh apps automatically when the device is connected to Wi-Fi." = "设备连接 Wi‑Fi 时自动刷新 App。";
+"Use the switches only when needed. Keeping unnecessary background activity enabled may increase battery usage." = "仅在需要时启用开关。长期启用不必要的后台活动可能增加耗电。";
+"Check signing, network connectivity, pairing, and device readiness." = "检查签名、网络连接、配对和设备就绪状态。";
+"Review diagnostic logs when an operation fails." = "操作失败时查看诊断日志。";
+"Inspect files stored by SideStore. Do not delete files unless you know what they are." = "查看 SideStore 保存的文件。除非确认用途，否则不要删除。";
+"Remove temporary data. Installed apps are not deleted." = "删除临时数据，不会删除已安装的 App。";
+"These options control authentication, pairing, certificates, networking, backups, and developer services. Change them only when you understand the effect." = "这些选项控制认证、配对、证书、网络、备份和开发者服务。了解影响后再修改。";
+"Developer and experimental tools are intended for troubleshooting or testing." = "开发者工具和实验性工具仅用于排障或测试。";
