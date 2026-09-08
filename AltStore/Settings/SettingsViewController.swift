@@ -98,6 +98,30 @@ extension SettingsViewController
     }
 }
 
+private enum SideStoreLanguage: String, CaseIterable
+{
+    case english = "en"
+    case simplifiedChinese = "zh-Hans"
+
+    var localeIdentifier: String
+    {
+        switch self
+        {
+        case .english: return "en_US"
+        case .simplifiedChinese: return "zh_CN"
+        }
+    }
+
+    var displayNameKey: String
+    {
+        switch self
+        {
+        case .english: return "English"
+        case .simplifiedChinese: return "Simplified Chinese"
+        }
+    }
+}
+
 final class SettingsViewController: UITableViewController
 {
     private var activeTeam: Team?
@@ -468,7 +492,7 @@ private extension SettingsViewController
             }
             else
             {
-                settingsHeaderFooterView.secondaryLabel.text = NSLocalizedString("Change the app icon or open system settings to change the app language.", comment: "")
+                settingsHeaderFooterView.secondaryLabel.text = NSLocalizedString("Tap Change Language to choose Chinese or English. SideStore will restart to apply the new language.", comment: "")
                 settingsHeaderFooterView.button.setTitle(NSLocalizedString("Change Language", comment: ""), for: .normal)
                 settingsHeaderFooterView.button.removeTarget(nil, action: nil, for: .primaryActionTriggered)
                 settingsHeaderFooterView.button.addTarget(self, action: #selector(SettingsViewController.openLanguageSettings(_:)), for: .primaryActionTriggered)
@@ -851,10 +875,69 @@ private extension SettingsViewController
     @objc func openLanguageSettings(_ sender: Any)
     {
         #if !os(tvOS)
-        guard let url = URL(string: UIApplication.openSettingsURLString) else { return }
-        UIApplication.shared.open(url)
+        let current = currentSideStoreLanguage()
+        let alertController = UIAlertController(
+            title: NSLocalizedString("Choose SideStore language", comment: ""),
+            message: NSLocalizedString("This changes SideStore directly. The app will restart after you choose a language.", comment: ""),
+            preferredStyle: .actionSheet
+        )
+
+        for language in SideStoreLanguage.allCases
+        {
+            let title = NSLocalizedString(language.displayNameKey, comment: "")
+            let action = UIAlertAction(title: title, style: .default) { [weak self] _ in
+                guard let self, language != current else { return }
+                self.applySideStoreLanguage(language)
+            }
+            alertController.addAction(action)
+        }
+
+        alertController.addAction(UIAlertAction(title: NSLocalizedString("Cancel", comment: ""), style: .cancel))
+
+        if let popoverController = alertController.popoverPresentationController
+        {
+            popoverController.sourceView = self.view
+            popoverController.sourceRect = self.view.bounds
+        }
+
+        present(alertController, animated: true)
         #endif
     }
+
+    #if !os(tvOS)
+    private func currentSideStoreLanguage() -> SideStoreLanguage
+    {
+        if let stored = UserDefaults.standard.string(forKey: "SideStorePreferredLanguage"),
+           let language = SideStoreLanguage(rawValue: stored)
+        {
+            return language
+        }
+
+        let systemLanguage = Locale.preferredLanguages.first ?? "en"
+        return systemLanguage.hasPrefix("zh") ? .simplifiedChinese : .english
+    }
+
+    private func applySideStoreLanguage(_ language: SideStoreLanguage)
+    {
+        UserDefaults.standard.set(language.rawValue, forKey: "SideStorePreferredLanguage")
+        // AppleLanguages is read at process launch by NSLocalizedString.
+        // Persisting it in the app domain makes the choice work in both the
+        // standalone SideStore app and the embedded LiveContainer bundle.
+        UserDefaults.standard.set([language.rawValue], forKey: "AppleLanguages")
+        UserDefaults.standard.set(language.localeIdentifier, forKey: "AppleLocale")
+        UserDefaults.standard.synchronize()
+
+        let alertController = UIAlertController(
+            title: NSLocalizedString("Language changed", comment: ""),
+            message: NSLocalizedString("SideStore will restart now to apply the new language.", comment: ""),
+            preferredStyle: .alert
+        )
+        alertController.addAction(UIAlertAction(title: NSLocalizedString("Restart SideStore", comment: ""), style: .default) { _ in
+            exit(0)
+        })
+        present(alertController, animated: true)
+    }
+    #endif
 }
 
 private extension SettingsViewController
