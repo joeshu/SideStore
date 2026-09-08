@@ -5,6 +5,7 @@ on:
     paths:
       - "AltStore/**"
       - "scripts/ci/check_zh_hans_ui_coverage.py"
+      - "scripts/ci/verify_language_switch.py"
       - ".github/workflows/localization-guard.yml"
   push:
     branches:
@@ -13,6 +14,7 @@ on:
     paths:
       - "AltStore/**"
       - "scripts/ci/check_zh_hans_ui_coverage.py"
+      - "scripts/ci/verify_language_switch.py"
       - ".github/workflows/localization-guard.yml"
 
 permissions:
@@ -28,3 +30,6 @@ jobs:
 
       - name: Verify device-visible Simplified Chinese coverage
         run: python3 scripts/ci/check_zh_hans_ui_coverage.py
+
+      - name: Verify real in-app language switch
+        run: python3 scripts/ci/verify_language_switch.py
