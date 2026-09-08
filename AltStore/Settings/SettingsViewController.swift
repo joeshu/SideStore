@@ -468,7 +468,7 @@ private extension SettingsViewController
             }
             else
             {
-                settingsHeaderFooterView.secondaryLabel.text = NSLocalizedString("Personalize your SideStore experience by choosing an alternate app icon.", comment: "")
+                settingsHeaderFooterView.secondaryLabel.text = NSLocalizedString("Personalize the app icon. To switch Chinese or English, open iOS Settings > Apps > SideStore > Language, then reopen SideStore.", comment: "")
             }
             
             
@@ -482,14 +482,21 @@ private extension SettingsViewController
             }
             else
             {
-                settingsHeaderFooterView.secondaryLabel.text = NSLocalizedString("Free up disk space by removing non-essential data, such as temporary files and backups for uninstalled apps.", comment: "")
+                settingsHeaderFooterView.secondaryLabel.text = NSLocalizedString("Health Check verifies signing and network readiness; Error Log helps diagnose failures; Storage Explorer shows SideStore files; Clear Cache removes temporary data without deleting installed apps.", comment: "")
             }
             
         case .credits:
             settingsHeaderFooterView.primaryLabel.text = NSLocalizedString("CREDITS", comment: "")
             
         case .advancedSettings:
-            settingsHeaderFooterView.primaryLabel.text = NSLocalizedString("ADVANCED SETTINGS", comment: "")
+            if isHeader
+            {
+                settingsHeaderFooterView.primaryLabel.text = NSLocalizedString("ADVANCED SETTINGS", comment: "")
+            }
+            else
+            {
+                settingsHeaderFooterView.secondaryLabel.text = NSLocalizedString("Feedback reports issues; Refresh Attempts shows refresh history; SideJITServer configures JIT; Pairing File repairs device communication; Anisette Servers support Apple ID authentication; Connection Configuration controls networking; Developer Portal Services manages App IDs, devices, and profiles; Certificate Management manages signing certificates; Backup & Restore protects data; User Customizations contains expert options.", comment: "")
+            }
 
         case .betaTesting:
             if isHeader
@@ -510,7 +517,14 @@ private extension SettingsViewController
 
             
         case .diagnostics:
-            settingsHeaderFooterView.primaryLabel.text = NSLocalizedString("DIAGNOSTICS", comment: "")
+            if isHeader
+            {
+                settingsHeaderFooterView.primaryLabel.text = NSLocalizedString("DIAGNOSTICS", comment: "")
+            }
+            else
+            {
+                settingsHeaderFooterView.secondaryLabel.text = NSLocalizedString("Developer Options controls logs, database, and WireGuard tools. Experimental Features contains unstable switches intended only for troubleshooting or testing.", comment: "")
+            }
             
         // case .macDirtyCow:
         //     if isHeader
@@ -948,7 +962,11 @@ extension SettingsViewController
             self.prepare(footerView, for: section, isHeader: false)
             return footerView
             
-        case .account, .credits, .advancedSettings, .instructions, .diagnostics: return nil
+        case .account, .credits, .instructions: return nil
+        case .advancedSettings, .diagnostics:
+            let footerView = tableView.dequeueReusableHeaderFooterView(withIdentifier: "HeaderFooterView") as! SettingsHeaderFooterView
+            self.prepare(footerView, for: section, isHeader: false)
+            return footerView
         }
     }
 
@@ -981,7 +999,9 @@ extension SettingsViewController
             let height = self.preferredHeight(for: self.prototypeHeaderFooterView, in: section, isHeader: false)
             return height
             
-        case .account, .credits, .advancedSettings, .instructions, .diagnostics: return 0.0
+        case .account, .credits, .instructions: return 0.0
+        case .advancedSettings, .diagnostics:
+            return self.preferredHeight(for: self.prototypeHeaderFooterView, in: section, isHeader: false)
         }
     }
 }
@@ -1074,7 +1094,7 @@ extension SettingsViewController
             switch row
             {
             case .sendFeedback:
-                let alertController = UIAlertController(title: "Send Feedback", message: "Choose a method to send feedback:", preferredStyle: .actionSheet)
+                let alertController = UIAlertController(title: NSLocalizedString("Send Feedback", comment: ""), message: NSLocalizedString("Choose a method to send feedback:", comment: ""), preferredStyle: .actionSheet)
                 
                 // Option 1: GitHub
                 alertController.addAction(UIAlertAction(title: "GitHub", style: .default) { _ in
@@ -1092,7 +1112,7 @@ extension SettingsViewController
                 
                 #if !os(tvOS)
                 // Option 3: Mail
-                alertController.addAction(UIAlertAction(title: "Send Email", style: .default) { _ in
+                alertController.addAction(UIAlertAction(title: NSLocalizedString("Send Email", comment: ""), style: .default) { _ in
                     if MFMailComposeViewController.canSendMail() {
                         let mailViewController = MFMailComposeViewController()
                         mailViewController.mailComposeDelegate = self
