@@ -1277,7 +1277,7 @@ extension SettingsViewController
     }
 }
 
-final private class SettingsGuideViewController: UITableViewController
+private final class SettingsGuideViewController: UITableViewController
 {
     private let sections: [(title: String, items: [(title: String, detail: String)])] = [
         (
@@ -1341,7 +1341,6 @@ final private class SettingsGuideViewController: UITableViewController
         tableView.separatorStyle = .none
         tableView.rowHeight = UITableView.automaticDimension
         tableView.estimatedRowHeight = 78
-        tableView.register(UITableViewCell.self, forCellReuseIdentifier: "SettingsGuideCell")
     }
 
     override func numberOfSections(in tableView: UITableView) -> Int
@@ -1361,7 +1360,7 @@ final private class SettingsGuideViewController: UITableViewController
 
     override func tableView(_ tableView: UITableView, cellForRowAt indexPath: IndexPath) -> UITableViewCell
     {
-        let cell = tableView.dequeueReusableCell(withIdentifier: "SettingsGuideCell", for: indexPath)
+        let cell = UITableViewCell(style: .subtitle, reuseIdentifier: "SettingsGuideCell")
         let item = sections[indexPath.section].items[indexPath.row]
         cell.backgroundColor = UIColor.white.withAlphaComponent(0.14)
         cell.textLabel?.text = item.title
