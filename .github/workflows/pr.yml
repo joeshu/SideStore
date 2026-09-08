@@ -10,7 +10,6 @@ on:
       - '.editorconfig'
       - '.gitignore'
       - '.gitmodules'
-      - '.github/**'
 
 concurrency:
   group: pr-${{ github.event.pull_request.number }}
