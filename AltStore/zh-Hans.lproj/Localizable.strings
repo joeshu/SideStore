@@ -291,3 +291,12 @@
 "Remove temporary data. Installed apps are not deleted." = "删除临时数据，不会删除已安装的 App。";
 "These options control authentication, pairing, certificates, networking, backups, and developer services. Change them only when you understand the effect." = "这些选项控制认证、配对、证书、网络、备份和开发者服务。了解影响后再修改。";
 "Developer and experimental tools are intended for troubleshooting or testing." = "开发者工具和实验性工具仅用于排障或测试。";
+
+/* In-app language switching */
+"Tap Change Language to choose Chinese or English. SideStore will restart to apply the new language." = "点击“切换语言”选择中文或 English。SideStore 将重启以应用新语言。";
+"Choose SideStore language" = "选择 SideStore 语言";
+"This changes SideStore directly. The app will restart after you choose a language." = "这里会直接修改 SideStore 的语言。选择后应用将重新启动。";
+"Simplified Chinese" = "简体中文";
+"Language changed" = "语言已切换";
+"SideStore will restart now to apply the new language." = "SideStore 将立即重新启动以应用新语言。";
+"Restart SideStore" = "重新启动 SideStore";
