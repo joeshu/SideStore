@@ -43,7 +43,7 @@ final class PairingFileManager: NSObject {
 
     nonisolated func fetchPairingFile() -> String? {
         let fm = FileManager.default
-        let documentsPath = fm.documentsDirectory.appendingPathComponent("/\(Self.pairingFileName)")
+        let documentsPath = fm.documentsDirectory.appendingPathComponent(Self.pairingFileName)
         if fm.fileExists(atPath: documentsPath.path),
            let contents = try? String(contentsOf: documentsPath), !contents.isEmpty 
         {
@@ -69,12 +69,18 @@ final class PairingFileManager: NSObject {
     }
 
     func savePairingFile(contents: String) throws {
+        let normalizedContents = contents.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !normalizedContents.isEmpty else {
+            throw OperationError.invalidPairingFile(reason: "Pairing file is empty")
+        }
+
+        // Validate before replacing the last known-good file. This prevents an
+        // invalid upload from poisoning future launches and refreshes.
+        _ = try PairingFileParser.parse(content: normalizedContents)
+
         let fm = FileManager.default
         let documentsPath = fm.documentsDirectory.appendingPathComponent(Self.pairingFileName)
-        if fm.fileExists(atPath: documentsPath.path) {
-            try? fm.removeItem(at: documentsPath)
-        }
-        try contents.write(to: documentsPath, atomically: true, encoding: .utf8)
+        try normalizedContents.write(to: documentsPath, atomically: true, encoding: .utf8)
         debugLog("[PairingFile] Successfully copied and saved pairing file to: \(documentsPath.path)")
         UserDefaults.standard.isPairingReset = false
     }
@@ -150,7 +156,11 @@ extension PairingFileManager: UIDocumentPickerDelegate {
 
     @MainActor
     func documentPicker(_ controller: UIDocumentPickerViewController, didPickDocumentsAt urls: [URL]) {
-        let url = urls[0]
+        guard let url = urls.first else {
+            self.completion?(nil)
+            controller.dismiss(animated: true, completion: nil)
+            return
+        }
         let isSecuredURL = url.startAccessingSecurityScopedResource() == true
         defer {
             if (isSecuredURL) {
