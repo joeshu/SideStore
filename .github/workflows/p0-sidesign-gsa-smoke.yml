@@ -32,6 +32,7 @@ jobs:
         run: |
           set -euo pipefail
           python3 scripts/ci/patch_sidesign_gsa.py
+          python3 scripts/ci/patch_sidesign_2fa_p0.py
           git -C Dependencies/SideSign diff --check
           git -C Dependencies/SideSign diff -- Sources/DeveloperPortal/Authentication.swift
 
