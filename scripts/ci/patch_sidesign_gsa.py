@@ -61,13 +61,15 @@ def main() -> int:
     old_request_start = '''    func sendAuthenticationRequest(parameters requestParameters: [String: any Sendable], anisetteData: AnisetteData) async throws -> [String: any Sendable] {
         let requestURL = Constants.URLs.grandSlamAuth
 '''
-    new_request_start = '''    private func resolveGrandSlamServiceURL(anisetteData: AnisetteData, xcodeVersion: String) async throws -> URL {
+    new_request_start = '''    private func resolveGrandSlamServiceURL(anisetteData: AnisetteData, xcodeVersion: String?) async throws -> URL {
         var request = URLRequest(url: Constants.URLs.grandSlamLookup)
         request.httpMethod = "GET"
         request.setValue("text/x-xml-plist", forHTTPHeaderField: "Accept")
         request.setValue(anisetteData.deviceDescription, forHTTPHeaderField: "X-MMe-Client-Info")
         request.setValue(Constants.userAgent, forHTTPHeaderField: "User-Agent")
-        request.setValue(xcodeVersion, forHTTPHeaderField: "X-Xcode-Version")
+        if let xcodeVersion = xcodeVersion {
+            request.setValue(xcodeVersion, forHTTPHeaderField: "X-Xcode-Version")
+        }
         request.setValue(Constants.authApp, forHTTPHeaderField: "X-Apple-App-Info")
 
         let (data, response) = try await session.data(for: request)
@@ -101,7 +103,7 @@ def main() -> int:
     func sendAuthenticationRequest(
         parameters requestParameters: [String: any Sendable],
         anisetteData: AnisetteData,
-        xcodeVersion: String,
+        xcodeVersion: String? = nil,
         closeConnection: Bool = false
     ) async throws -> [String: any Sendable] {
         let requestURL: URL
@@ -128,10 +130,12 @@ def main() -> int:
             "X-MMe-Client-Info": anisetteData.deviceDescription,
             "Accept": "text/x-xml-plist",
             "User-Agent": Constants.userAgent,
-            "X-Xcode-Version": xcodeVersion,
             "X-Apple-App-Info": Constants.authApp
         ]
         headers.forEach { request.setValue($1, forHTTPHeaderField: $0) }
+        if let xcodeVersion = xcodeVersion {
+            request.setValue(xcodeVersion, forHTTPHeaderField: "X-Xcode-Version")
+        }
         if closeConnection {
             request.setValue("close", forHTTPHeaderField: "Connection")
         }
