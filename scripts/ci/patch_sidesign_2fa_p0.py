@@ -827,6 +827,26 @@ public extension DeveloperPortal {
         "replace SMS 2FA state machine",
     )
 
+    gsa_request_replacements = [
+        (
+            "try await session.data(for: request)",
+            "try await performGSARequest(request)",
+            "route GSA request traffic through isolated URLSession",
+        ),
+        (
+            "try await session.data(for: verifyRequest)",
+            "try await performGSARequest(verifyRequest)",
+            "route GSA verification traffic through isolated URLSession",
+        ),
+    ]
+    for old, new, label in gsa_request_replacements:
+        count = text.count(old)
+        if count == 0:
+            raise RuntimeError(f"{label}: anchor not found")
+        text = text.replace(old, new)
+    if "session.data(for:" in text:
+        raise RuntimeError("GSA authentication source still uses shared URLSession")
+
     after = hashlib.sha256(text.encode("utf-8")).hexdigest()
     if before == after:
         raise RuntimeError("transform produced no change")
