@@ -8,7 +8,7 @@ on:
 
 jobs:
   smoke:
-    name: Apply patch and compile SideSign
+    name: Transform and compile SideSign
     runs-on: macos-26
     steps:
       - uses: actions/checkout@v4
@@ -28,11 +28,10 @@ jobs:
           echo "SideSign baseline: $ACTUAL"
           test "$ACTUAL" = "0ea22b202ebb5de28615ecec51b276c57aa3ec92"
 
-      - name: Apply GSA compatibility patch
+      - name: Apply deterministic GSA compatibility transform
         run: |
           set -euo pipefail
-          git -C Dependencies/SideSign apply --check "$GITHUB_WORKSPACE/patches/sidesign-gsa-iloader-233.patch"
-          git -C Dependencies/SideSign apply "$GITHUB_WORKSPACE/patches/sidesign-gsa-iloader-233.patch"
+          python3 scripts/ci/patch_sidesign_gsa.py
           git -C Dependencies/SideSign diff --check
           git -C Dependencies/SideSign diff -- Sources/DeveloperPortal/Authentication.swift
 
