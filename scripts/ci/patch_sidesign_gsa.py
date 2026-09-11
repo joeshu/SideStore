@@ -22,6 +22,44 @@ def main() -> int:
     text = TARGET.read_text(encoding="utf-8")
     before = hashlib.sha256(text.encode("utf-8")).hexdigest()
 
+    text = replace_once(
+        text,
+        "import GSACryptoKit\n",
+        """import GSACryptoKit
+
+private func gsaIntegerValue(_ value: Any?) -> Int? {
+    if let value = value as? Int {
+        return value
+    }
+    if let value = value as? NSNumber {
+        return value.intValue
+    }
+    if let value = value as? String {
+        return Int(value)
+    }
+    return nil
+}
+
+private func performGSARequest(_ request: URLRequest) async throws -> (Data, URLResponse) {
+    let configuration = URLSessionConfiguration.ephemeral
+    configuration.urlCache = nil
+    configuration.urlCredentialStorage = nil
+    configuration.httpCookieStorage = nil
+    configuration.httpShouldSetCookies = false
+    configuration.httpShouldUsePipelining = false
+    configuration.requestCachePolicy = .reloadIgnoringLocalCacheData
+    configuration.httpMaximumConnectionsPerHost = 1
+    configuration.timeoutIntervalForRequest = 60
+    configuration.timeoutIntervalForResource = 120
+
+    let gsaSession = URLSession(configuration: configuration)
+    defer { gsaSession.finishTasksAndInvalidate() }
+    return try await gsaSession.data(for: request)
+}
+""",
+        "add isolated GSA URLSession and numeric error parsing",
+    )
+
     old_client_dictionary = '''        let clientDictionary: [String: any Sendable] = [
             "bootstrap": true,
             "icscrec": true,
@@ -397,10 +435,13 @@ def main() -> int:
             }
         }
 '''
-    new_error_mapping = '''        let errorCode = status["ec"] as? Int ?? 0
+    new_error_mapping = '''        let rawErrorCode = status["ec"]
+        let errorCode = gsaIntegerValue(rawErrorCode) ?? 0
+        let errorDesc = status["em"] as? String
+        let ecType = rawErrorCode.map { String(describing: type(of: $0)) } ?? "missing"
+        let statusKeys = status.keys.sorted().joined(separator: ",")
         if errorCode != 0 {
-            let errorDesc = status["em"] as? String
-            debugLog("[SideSign] GSA phase=\(phase) rejected request: HTTP \(statusCode), ec=\(errorCode), emPresent=\(errorDesc != nil)")
+            debugLog("[SideSign] GSA phase=\(phase) rejected request: HTTP \(statusCode), ec=\(errorCode), ecType=\(ecType), emPresent=\(errorDesc != nil), statusKeys=\(statusKeys)")
             switch errorCode {
             case GrandSlamAuthErrorCodes.incorrectCredentials:
                 throw DeveloperPortalError.incorrectCredentials(cause: errorDesc)
