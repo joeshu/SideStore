@@ -334,13 +334,18 @@ final class AuthenticationOperation: BaseStandaloneOperation<AuthenticatedOperat
         
         let handler = self.context.authenticationHandler
         let xcodeVersion = await AnisetteConfigManager.shared.resolvedXcodeVersion()
+        let freshAnisetteDataProvider: @Sendable () async throws -> ALTAnisetteData = { [weak self] in
+            guard let self else { throw OperationError.cancelled }
+            return try await self.getAnisetteData(forceRefresh: true)
+        }
 
         func authenticate(with anisetteData: ALTAnisetteData) async throws -> (ALTAccount, ALTAppleAPISession) {
             try await AuthManager.shared.authenticate(
                 appleID: normalizedAppleID,
                 password: password,
                 anisetteData: anisetteData,
-                xcodeVersion: xcodeVersion
+                xcodeVersion: xcodeVersion,
+                anisetteDataProvider: freshAnisetteDataProvider
             ) { mode, completionHandler in
                 Task.detached {
                     do {
