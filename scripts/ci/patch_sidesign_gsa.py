@@ -101,8 +101,9 @@ def main() -> int:
         var request = URLRequest(url: Constants.URLs.grandSlamLookup)
         request.httpMethod = "GET"
         request.setValue("text/x-xml-plist", forHTTPHeaderField: "Accept")
-        request.setValue(anisetteData.deviceDescription, forHTTPHeaderField: "X-MMe-Client-Info")
-        request.setValue(Constants.userAgent, forHTTPHeaderField: "User-Agent")
+        // Match iLoader 2.3.3 RemoteV3's paired client fingerprint.
+        request.setValue("<Mac15,7> <macOS;27.0;26A5378j> <com.apple.AuthKit/1 (com.apple.akd/1.0)>", forHTTPHeaderField: "X-MMe-Client-Info")
+        request.setValue("akd/1.0 CFNetwork/808.1.4", forHTTPHeaderField: "User-Agent")
         request.setValue("27.0 (27A5218g)", forHTTPHeaderField: "X-Xcode-Version")
         request.setValue(Constants.authApp, forHTTPHeaderField: "X-Apple-App-Info")
         request.cachePolicy = .reloadIgnoringLocalCacheData
@@ -162,18 +163,19 @@ def main() -> int:
         ]
         headers.forEach { request.setValue($1, forHTTPHeaderField: $0) }
 '''
-    new_headers = '''        let headers: [String: String] = [
+    new_headers = '''        // Match iLoader 2.3.3's complete RemoteV3 GrandSlam fingerprint.
+        let headers: [String: String] = [
             "Content-Type": "text/x-xml-plist",
-            "X-MMe-Client-Info": anisetteData.deviceDescription,
+            "X-MMe-Client-Info": "<Mac15,7> <macOS;27.0;26A5378j> <com.apple.AuthKit/1 (com.apple.akd/1.0)>",
             "Accept": "text/x-xml-plist",
-            "User-Agent": Constants.userAgent,
+            "User-Agent": "akd/1.0 CFNetwork/808.1.4",
             "X-Apple-App-Info": Constants.authApp
         ]
         headers.forEach { request.setValue($1, forHTTPHeaderField: $0) }
         request.setValue("27.0 (27A5218g)", forHTTPHeaderField: "X-Xcode-Version")
         request.cachePolicy = .reloadIgnoringLocalCacheData
         request.setValue("close", forHTTPHeaderField: "Connection")
-        debugLog("[SideSign] GSA phase=\(phase), xcode=27.0 (27A5218g), requestedClose=\(closeConnection)")
+        debugLog("[SideSign] GSA phase=\(phase), host=\(requestURL.host ?? "unknown"), fingerprint=iloader-2.3.3, requestedClose=\(closeConnection)")
 '''
     text = replace_once(text, old_headers, new_headers, "align GrandSlam request headers")
 
@@ -201,9 +203,13 @@ def main() -> int:
     new_diagnostics = '''        let httpResponse = response as? HTTPURLResponse
         let statusCode = httpResponse?.statusCode ?? 0
         let contentType = httpResponse?.value(forHTTPHeaderField: "Content-Type") ?? "unknown"
+        let responseHost = httpResponse?.url?.host ?? requestURL.host ?? "unknown"
+        let responseServer = httpResponse?.value(forHTTPHeaderField: "Server") ?? "unknown"
+        let retryAfter = httpResponse?.value(forHTTPHeaderField: "Retry-After") ?? "none"
+        let responseSummary = "host=\(responseHost), HTTP \(statusCode), content-type=\(contentType), server=\(responseServer), retry-after=\(retryAfter), bytes=\(data.count)"
 
         guard !data.isEmpty else {
-            debugLog("[SideSign] Auth endpoint returned 0 bytes: HTTP \\(statusCode), contentType=\\(contentType)")
+            debugLog("[SideSign] Auth endpoint returned 0 bytes: \\(responseSummary)")
             throw ServerError.badServerResponse(
                 reason: "Auth endpoint returned empty response (HTTP \\(statusCode))",
                 jsonPayload: "contentType=\\(contentType), bytes=0"
@@ -211,7 +217,7 @@ def main() -> int:
         }
 
         guard let responseDictionary = parsePlistOrJSON(data) else {
-            debugLog("[SideSign] Auth endpoint returned invalid response format: HTTP \\(statusCode), contentType=\\(contentType), bytes=\\(data.count)")
+            debugLog("[SideSign] Auth endpoint returned invalid response format: \\(responseSummary)")
             throw ServerError.invalidResponseFormat(
                 rawPayload: "HTTP \\(statusCode), contentType=\\(contentType), bytes=\\(data.count)"
             )
@@ -219,7 +225,7 @@ def main() -> int:
 
         let dictionary = (responseDictionary["Response"] as? [String: any Sendable]) ?? responseDictionary
         guard let status = dictionary["Status"] as? [String: any Sendable] else {
-            debugLog("[SideSign] Auth endpoint response missing Status: HTTP \\(statusCode), contentType=\\(contentType), bytes=\\(data.count)")
+            debugLog("[SideSign] Auth endpoint response missing Status: \\(responseSummary)")
             throw ServerError.missingKey(
                 key: "Status",
                 jsonPayload: "HTTP \\(statusCode), contentType=\\(contentType), bytes=\\(data.count)"
@@ -258,7 +264,7 @@ def main() -> int:
                 domain: "SideSign.GSA.\\(phase)",
                 code: -1001,
                 userInfo: [
-                    NSLocalizedDescriptionKey: "Apple GSA \\(phase) returned an empty response (HTTP \\(statusCode), content-type=\\(contentType), bytes=0)."
+                    NSLocalizedDescriptionKey: "Apple GSA \\(phase) returned an empty response (\\(responseSummary))."
                 ]
             )''',
             "surface empty GSA response",
@@ -271,7 +277,7 @@ def main() -> int:
                 domain: "SideSign.GSA.\\(phase)",
                 code: -1002,
                 userInfo: [
-                    NSLocalizedDescriptionKey: "Apple GSA \\(phase) returned a non-plist response (HTTP \\(statusCode), content-type=\\(contentType), bytes=\\(data.count))."
+                    NSLocalizedDescriptionKey: "Apple GSA \\(phase) returned a non-plist response (\\(responseSummary))."
                 ]
             )''',
             "surface GSA response format",
@@ -285,7 +291,7 @@ def main() -> int:
                 domain: "SideSign.GSA.\\(phase)",
                 code: -1003,
                 userInfo: [
-                    NSLocalizedDescriptionKey: "Apple GSA \\(phase) response omitted Status (HTTP \\(statusCode), content-type=\\(contentType), bytes=\\(data.count))."
+                    NSLocalizedDescriptionKey: "Apple GSA \\(phase) response omitted Status (\\(responseSummary))."
                 ]
             )''',
             "surface missing GSA status",
