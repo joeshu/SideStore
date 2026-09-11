@@ -422,6 +422,128 @@ def main() -> int:
 '''
     text = replace_once(text, old_error_mapping, new_error_mapping, "surface credential-safe GSA phase/error code")
 
+
+    old_sms_request = '''        let serverInfo: [String: any Sendable] = [
+            "mode": requestedMode,
+            "phoneNumber.id": requestedPhoneID ?? "1"
+        ]
+
+        var request = makeTwoFactorRequest(url: Constants.URLs.phonePutURL(mode: requestedMode), dsid: dsid, idmsToken: idmsToken, anisetteData: anisetteData, xcodeVersion: xcodeVersion)
+        request.httpMethod = "POST"
+        request.httpBody = try PropertyListSerialization.data(fromPropertyList: [
+            "serverInfo": serverInfo
+        ], format: .xml, options: 0)
+'''
+    new_sms_request = '''        var request = makeTwoFactorRequest(
+            url: URL(string: Constants.URLs.phoneBase)!,
+            dsid: dsid,
+            idmsToken: idmsToken,
+            anisetteData: anisetteData,
+            xcodeVersion: xcodeVersion
+        )
+        request.httpMethod = "PUT"
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.setValue("application/json", forHTTPHeaderField: "Accept")
+        let phoneNumberID = Int(requestedPhoneID ?? "1") ?? 1
+        request.httpBody = try JSONSerialization.data(withJSONObject: [
+            "phoneNumber": ["id": phoneNumberID],
+            "mode": requestedMode
+        ], options: [])
+'''
+    text = replace_once(text, old_sms_request, new_sms_request, "align iLoader SMS request endpoint/body")
+
+    old_sms_verify = '''                var verifyRequest = makeTwoFactorRequest(url: Constants.URLs.phoneSecurityCode, dsid: dsid, idmsToken: idmsToken, anisetteData: anisetteData, xcodeVersion: xcodeVersion)
+                verifyRequest.httpMethod = "POST"
+                verifyRequest.httpBody = try PropertyListSerialization.data(fromPropertyList: [
+                    "securityCode.code": code,
+                    "serverInfo": ["mode": activeMode, "phoneNumber.id": phoneID]
+                ], format: .xml, options: 0)
+'''
+    new_sms_verify = '''                var verifyRequest = makeTwoFactorRequest(
+                    url: URL(string: Constants.URLs.phoneBase + "/securitycode")!,
+                    dsid: dsid,
+                    idmsToken: idmsToken,
+                    anisetteData: anisetteData,
+                    xcodeVersion: xcodeVersion
+                )
+                verifyRequest.httpMethod = "POST"
+                verifyRequest.setValue("application/json", forHTTPHeaderField: "Content-Type")
+                verifyRequest.setValue("application/json", forHTTPHeaderField: "Accept")
+                let phoneNumberID = Int(phoneID) ?? 1
+                verifyRequest.httpBody = try JSONSerialization.data(withJSONObject: [
+                    "securityCode": ["code": code],
+                    "phoneNumber": ["id": phoneNumberID],
+                    "mode": activeMode
+                ], options: [])
+'''
+    text = replace_once(text, old_sms_verify, new_sms_verify, "align iLoader SMS verification endpoint/body")
+
+    old_2fa_headers = '''        let headers: [String: String] = [
+            "Accept": "application/x-buddyml",
+            "Accept-Language": "en-us",
+            "Content-Type": "application/x-plist",
+            "User-Agent": Constants.xcodeUserAgent,
+            "X-Apple-App-Info": Constants.authApp,
+            "X-Xcode-Version": xcodeVersion,
+            "X-Apple-Identity-Token": encodedIdentityToken,
+            "X-Apple-I-MD-M": anisetteData.machineID,
+            "X-Apple-I-MD": anisetteData.oneTimePassword,
+            "X-Apple-I-MD-LU": anisetteData.localUserID,
+            "X-Apple-I-MD-RINFO": "\\(anisetteData.routingInfo)",
+            "X-Mme-Device-Id": anisetteData.deviceUniqueIdentifier,
+            "X-MMe-Client-Info": anisetteData.deviceDescription,
+            "X-Apple-I-Client-Time": formatDate(anisetteData.date),
+            "X-Apple-Locale": anisetteData.locale.identifier,
+            "X-Apple-I-TimeZone": anisetteData.timeZone.abbreviation(for: anisetteData.date) ?? "PST"
+        ]
+'''
+    new_2fa_headers = '''        // Match iLoader 2.3.3's build_2fa_headers plus its GrandSlam base headers.
+        let headers: [String: String] = [
+            "Accept": "text/x-xml-plist",
+            "Content-Type": "text/x-xml-plist",
+            "X-MMe-Client-Info": "<Mac15,7> <macOS;27.0;26A5378j> <com.apple.AuthKit/1 (com.apple.akd/1.0)>",
+            "User-Agent": "akd/1.0 CFNetwork/808.1.4",
+            "X-Apple-App-Info": Constants.authApp,
+            "X-Xcode-Version": "27.0 (27A5218g)",
+            "X-Apple-Identity-Token": encodedIdentityToken,
+            "X-Mme-Device-Id": anisetteData.deviceUniqueIdentifier,
+            "X-Apple-I-MD": anisetteData.oneTimePassword,
+            "X-Apple-I-MD-M": anisetteData.machineID,
+            "X-Apple-I-MD-RINFO": "\\(anisetteData.routingInfo)"
+        ]
+'''
+    text = replace_once(text, old_2fa_headers, new_2fa_headers, "align iLoader 2FA headers")
+
+    old_sms_response_log = '''        let rawStr = prettyJSONString(from: data)
+        verboseLog("[SideSign] sendPhonePut raw response (HTTP \(statusCode)): \(rawStr)")
+'''
+    new_sms_response_log = '''        let responseContentType = httpResponse?.value(forHTTPHeaderField: "Content-Type") ?? "unknown"
+        let responseSummary = "HTTP \(statusCode), content-type=\(responseContentType), bytes=\(data.count)"
+        verboseLog("[SideSign] sendPhonePut response summary: \(responseSummary)")
+        let rawStr = responseSummary
+'''
+    text = replace_once(text, old_sms_response_log, new_sms_response_log, "make SMS diagnostics credential-safe")
+
+    old_sms_guard = '''        guard statusCode == HTTPStatusCodes.ok else {
+            let reason = errorMsg ?? HTTPStatusCodes.localizedDescription(for: statusCode)
+            debugLog("[SideSign] sendPhonePut failed (HTTP \(statusCode)): \(reason)")
+            throw ServerError.badServerResponse(reason: reason, jsonPayload: rawStr)
+        }
+'''
+    new_sms_guard = '''        let hasActiveChallenge = statusCode == 412
+            && (responseDict?["mode"] as? String) == requestedMode
+            && (responseDict?["authenticationType"] as? String) == "hsa2"
+            && ((responseDict?["securityCode"] as? [String: any Sendable])?["length"] as? Int) == 6
+        guard statusCode == HTTPStatusCodes.ok || hasActiveChallenge else {
+            let reason = errorMsg ?? HTTPStatusCodes.localizedDescription(for: statusCode)
+            debugLog("[SideSign] sendPhonePut failed (HTTP \(statusCode), content-type=\(httpResponse?.value(forHTTPHeaderField: "Content-Type") ?? "unknown"), bytes=\(data.count)): \(reason)")
+            throw ServerError.badServerResponse(
+                reason: reason,
+                jsonPayload: "HTTP \(statusCode), content-type=\(httpResponse?.value(forHTTPHeaderField: "Content-Type") ?? "unknown"), bytes=\(data.count)"
+            )
+        }
+'''
+    text = replace_once(text, old_sms_guard, new_sms_guard, "accept iLoader active SMS challenge")
     after = hashlib.sha256(text.encode("utf-8")).hexdigest()
     if before == after:
         raise RuntimeError("transform produced no change")
