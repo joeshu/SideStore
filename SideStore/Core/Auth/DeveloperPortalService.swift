@@ -240,7 +240,14 @@ class DeveloperPortalAuthService: DeveloperPortalService {
         }
     }
 
-    func authenticate(appleID: String, password: String, anisetteData: ALTAnisetteData, xcodeVersion: String, verificationHandler: DeveloperPortal.VerificationHandler?) async throws -> (ALTAccount, ALTAppleAPISession) {
+    func authenticate(
+        appleID: String,
+        password: String,
+        anisetteData: ALTAnisetteData,
+        xcodeVersion: String,
+        anisetteDataProvider: (@Sendable () async throws -> ALTAnisetteData)? = nil,
+        verificationHandler: DeveloperPortal.VerificationHandler? = nil
+    ) async throws -> (ALTAccount, ALTAppleAPISession) {
         // Reaching this boundary proves Anisette data is already available. The SideSign
         // authenticate call below includes GSA/SRP, optional 2FA, token acquisition and
         // its internal account fetch, so we record that real boundary as apple_authenticate
@@ -273,6 +280,7 @@ class DeveloperPortalAuthService: DeveloperPortalService {
                 password: password,
                 anisetteData: anisetteData,
                 xcodeVersion: xcodeVersion,
+                anisetteDataProvider: anisetteDataProvider,
                 verificationHandler: stagedVerificationHandler
             )
             AuthSubstageTraceStore.shared.finish("apple_authenticate", startedAt: startedAt)
