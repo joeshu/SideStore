@@ -75,9 +75,10 @@ final class AuthenticationOperation: BaseStandaloneOperation<AuthenticatedOperat
         """)
     }
 
-    private func getAnisetteData(for session: ALTAppleAPISession? = nil) async throws -> ALTAnisetteData {
+    private func getAnisetteData(for session: ALTAppleAPISession? = nil, forceRefresh: Bool = false) async throws -> ALTAnisetteData {
         let currentAnisette = session?.anisetteData ?? self.lastFetchedAnisetteData
-        if let currentAnisette = currentAnisette,
+        if !forceRefresh,
+           let currentAnisette = currentAnisette,
            currentAnisette.date.timeIntervalSinceNow >= -AnisetteProvider.validDuration {
             return currentAnisette
         }
@@ -320,36 +321,65 @@ final class AuthenticationOperation: BaseStandaloneOperation<AuthenticatedOperat
     }
     
     private func authenticate(appleID: String, password: String) async throws -> (ALTAccount, ALTAppleAPISession) {
-        self.appleIDEmailAddress = appleID
+        // Match iloader 2.3.3: canonicalize the Apple ID before GSA/SRP.
+        let normalizedAppleID = appleID.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        guard !normalizedAppleID.isEmpty else {
+            throw NSError(
+                domain: "SideStore.Authentication",
+                code: 2,
+                userInfo: [NSLocalizedDescriptionKey: "Apple ID cannot be empty."]
+            )
+        }
+        self.appleIDEmailAddress = normalizedAppleID
         
-        let anisetteData = try await self.getAnisetteData()
         let handler = self.context.authenticationHandler
-        
         let xcodeVersion = await AnisetteConfigManager.shared.resolvedXcodeVersion()
 
-        let (account, session) = try await AuthManager.shared.authenticate(
-            appleID: appleID,
-            password: password,
-            anisetteData: anisetteData,
-            xcodeVersion: xcodeVersion
-        ) { mode, completionHandler in
-
-            Task.detached {
-                do {
-                    let action = try await handler.verificationCode(for: mode)
-                    completionHandler(action)
-                } catch {
-                    completionHandler(.cancel)
+        func authenticate(with anisetteData: ALTAnisetteData) async throws -> (ALTAccount, ALTAppleAPISession) {
+            try await AuthManager.shared.authenticate(
+                appleID: normalizedAppleID,
+                password: password,
+                anisetteData: anisetteData,
+                xcodeVersion: xcodeVersion
+            ) { mode, completionHandler in
+                Task.detached {
+                    do {
+                        let action = try await handler.verificationCode(for: mode)
+                        completionHandler(action)
+                    } catch {
+                        completionHandler(.cancel)
+                    }
                 }
             }
         }
-        
-        AuthManager.shared.adsid = session.dsid
-        AuthManager.shared.xcodeToken = session.authToken
-        AuthManager.shared.currentAppleID = appleID
-        AuthManager.shared.password = password
-        
-        return (account, session)
+
+        do {
+            let result = try await authenticate(with: self.getAnisetteData())
+            AuthManager.shared.adsid = result.1.dsid
+            AuthManager.shared.xcodeToken = result.1.authToken
+            AuthManager.shared.currentAppleID = normalizedAppleID
+            AuthManager.shared.password = password
+            return result
+        } catch {
+            // iloader 2.3.3 uses a persistent RemoteV3-backed flow. If Apple
+            // rejects only the GSA/SRP exchange, refresh the cached Anisette
+            // blob once and retry without retrying invalid-password errors.
+            let nsError = error as NSError
+            let stage = nsError.userInfo["SideStoreAuthStage"] as? String
+            let underlyingDomain = (nsError.userInfo[NSUnderlyingErrorKey] as? NSError)?.domain
+            let isGSASRPFailure = stage == "gsa_srp" ||
+                nsError.domain == "SideSign.ServerError" ||
+                underlyingDomain == "SideSign.ServerError"
+            guard isGSASRPFailure else { throw error }
+            
+            self.debugLog("[Authentication] GSA/SRP failed; refreshing Anisette once before retry")
+            let result = try await authenticate(with: self.getAnisetteData(forceRefresh: true))
+            AuthManager.shared.adsid = result.1.dsid
+            AuthManager.shared.xcodeToken = result.1.authToken
+            AuthManager.shared.currentAppleID = normalizedAppleID
+            AuthManager.shared.password = password
+            return result
+        }
     }
 
 
