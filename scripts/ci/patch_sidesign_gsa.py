@@ -258,7 +258,7 @@ def main() -> int:
                 domain: "SideSign.GSA.\\(phase)",
                 code: -1001,
                 userInfo: [
-                    NSLocalizedDescriptionKey: "Apple GSA \\(phase) returned an empty response (HTTP \\(statusCode), bytes=0)."
+                    NSLocalizedDescriptionKey: "Apple GSA \\(phase) returned an empty response (HTTP \\(statusCode), content-type=\\(contentType), bytes=0)."
                 ]
             )''',
             "surface empty GSA response",
@@ -271,7 +271,7 @@ def main() -> int:
                 domain: "SideSign.GSA.\\(phase)",
                 code: -1002,
                 userInfo: [
-                    NSLocalizedDescriptionKey: "Apple GSA \\(phase) returned a non-plist response (HTTP \\(statusCode), bytes=\\(data.count))."
+                    NSLocalizedDescriptionKey: "Apple GSA \\(phase) returned a non-plist response (HTTP \\(statusCode), content-type=\\(contentType), bytes=\\(data.count))."
                 ]
             )''',
             "surface GSA response format",
@@ -285,7 +285,7 @@ def main() -> int:
                 domain: "SideSign.GSA.\\(phase)",
                 code: -1003,
                 userInfo: [
-                    NSLocalizedDescriptionKey: "Apple GSA \\(phase) response omitted Status (HTTP \\(statusCode), bytes=\\(data.count))."
+                    NSLocalizedDescriptionKey: "Apple GSA \\(phase) response omitted Status (HTTP \\(statusCode), content-type=\\(contentType), bytes=\\(data.count))."
                 ]
             )''',
             "surface missing GSA status",
