@@ -1,0 +1,42 @@
+name: P0 SideSign GSA smoke
+
+on:
+  push:
+    branches:
+      - codex/p0-sidesign-gsa-iloader-233-20260911
+  workflow_dispatch:
+
+jobs:
+  smoke:
+    name: Apply patch and compile SideSign
+    runs-on: macos-26
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+          fetch-depth: 1
+
+      - name: Setup Xcode
+        uses: maxim-lobanov/setup-xcode@v1.6.0
+        with:
+          xcode-version: '26.2'
+
+      - name: Verify pinned SideSign baseline
+        run: |
+          set -euo pipefail
+          ACTUAL=$(git -C Dependencies/SideSign rev-parse HEAD)
+          echo "SideSign baseline: $ACTUAL"
+          test "$ACTUAL" = "0ea22b202ebb5de28615ecec51b276c57aa3ec92"
+
+      - name: Apply GSA compatibility patch
+        run: |
+          set -euo pipefail
+          git -C Dependencies/SideSign apply --check "$GITHUB_WORKSPACE/patches/sidesign-gsa-iloader-233.patch"
+          git -C Dependencies/SideSign apply "$GITHUB_WORKSPACE/patches/sidesign-gsa-iloader-233.patch"
+          git -C Dependencies/SideSign diff --check
+          git -C Dependencies/SideSign diff -- Sources/DeveloperPortal/Authentication.swift
+
+      - name: Compile SideSign package
+        run: |
+          set -euo pipefail
+          swift build --package-path Dependencies/SideSign
