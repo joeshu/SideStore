@@ -35,6 +35,32 @@ jobs:
           git -C Dependencies/SideSign diff --check
           git -C Dependencies/SideSign diff -- Sources/DeveloperPortal/Authentication.swift
 
+      - name: Preload SideSign binary artifacts
+        shell: bash
+        run: |
+          set -euo pipefail
+          ARTIFACTS_DIR="$HOME/Library/Caches/org.swift.swiftpm/artifacts"
+          mkdir -p "$ARTIFACTS_DIR"
+
+          verify_download() {
+            local file="$1"
+            local expected_sha256="$2"
+            local url="$3"
+            rm -f "$file"
+            curl -fsSL --retry 3 "$url" -o "$file"
+            printf '%s  %s\n' "$expected_sha256" "$file" | shasum -a 256 -c -
+          }
+
+          verify_download \
+            "$ARTIFACTS_DIR/https___github_com_krzyzanowskim_OpenSSL_releases_download_3_6_2000_OpenSSL_xcframework_zip" \
+            "37846a8bd302cb2443eff47f1045ab844d0cd40bf82cc6159cfad9aa5c3eff9e" \
+            "https://github.com/krzyzanowskim/OpenSSL/releases/download/3.6.2000/OpenSSL.xcframework.zip"
+
+          verify_download \
+            "$ARTIFACTS_DIR/https___github_com_mahee96_unicorn_releases_download_2_1_4_multiarch_Unicorn_xcframework_zip" \
+            "4f61907db6aafc56fb3e336b524d742342312f498bb40739f1da55fb4a24614a" \
+            "https://github.com/mahee96/unicorn/releases/download/2.1.4-multiarch/Unicorn.xcframework.zip"
+
       - name: Compile SideSign package
         run: |
           set -euo pipefail
