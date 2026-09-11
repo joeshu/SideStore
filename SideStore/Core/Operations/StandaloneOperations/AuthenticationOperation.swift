@@ -359,25 +359,22 @@ final class AuthenticationOperation: BaseStandaloneOperation<AuthenticatedOperat
         }
 
         do {
-            let result = try await authenticate(with: self.getAnisetteData())
+            // A password login starts a new GrandSlam state machine. Do not
+            // reuse Anisette left behind by a failed silent-token attempt.
+            let result = try await authenticate(with: self.getAnisetteData(forceRefresh: true))
             AuthManager.shared.adsid = result.1.dsid
             AuthManager.shared.xcodeToken = result.1.authToken
             AuthManager.shared.currentAppleID = normalizedAppleID
             AuthManager.shared.password = password
             return result
         } catch {
-            // iloader 2.3.3 uses a persistent RemoteV3-backed flow. If Apple
-            // rejects only the GSA/SRP exchange, refresh the cached Anisette
-            // blob once and retry without retrying invalid-password errors.
-            let nsError = error as NSError
-            let stage = nsError.userInfo["SideStoreAuthStage"] as? String
-            let underlyingDomain = (nsError.userInfo[NSUnderlyingErrorKey] as? NSError)?.domain
-            let isGSASRPFailure = stage == "gsa_srp" ||
-                nsError.domain == "SideSign.ServerError" ||
-                underlyingDomain == "SideSign.ServerError"
-            guard isGSASRPFailure else { throw error }
+            // Never replay the whole password + 2FA flow after a verification,
+            // app-token, account, or Developer Portal failure. iLoader keeps
+            // those as distinct states. Only a pre-auth network transport
+            // failure is eligible for one fresh-Anisette retry.
+            guard self.isRetryableInitialGSATransportFailure(error) else { throw error }
             
-            self.debugLog("[Authentication] GSA/SRP failed; refreshing Anisette once before retry")
+            self.debugLog("[Authentication] Initial GSA transport failed; refreshing Anisette once before retry")
             let result = try await authenticate(with: self.getAnisetteData(forceRefresh: true))
             AuthManager.shared.adsid = result.1.dsid
             AuthManager.shared.xcodeToken = result.1.authToken
@@ -385,6 +382,29 @@ final class AuthenticationOperation: BaseStandaloneOperation<AuthenticatedOperat
             AuthManager.shared.password = password
             return result
         }
+    }
+
+    private func isRetryableInitialGSATransportFailure(_ error: Error) -> Bool {
+        var currentError: NSError? = error as NSError
+        var visited = Set<ObjectIdentifier>()
+
+        while let nsError = currentError {
+            let identity = ObjectIdentifier(nsError)
+            guard visited.insert(identity).inserted else { break }
+
+            let isInitialGSAPhase = nsError.domain == "SideSign.GSA.init"
+                || nsError.domain == "SideSign.GSA.complete"
+            // -1000 is the explicit URLSession/network wrapper emitted by the
+            // deterministic SideSign transport. HTTP 429/5xx and parsed Apple
+            // responses are intentionally not retried here.
+            if isInitialGSAPhase && nsError.code == -1000 {
+                return true
+            }
+
+            currentError = nsError.userInfo[NSUnderlyingErrorKey] as? NSError
+        }
+
+        return false
     }
 
 

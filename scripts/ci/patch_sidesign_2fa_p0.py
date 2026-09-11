@@ -60,6 +60,7 @@ public extension DeveloperPortal {
                       xcodeVersion: String,
                       machinePassword: String? = nil,
                       anisetteDataProvider: FreshAnisetteDataProvider? = nil,
+                      grandSlamServiceURL: URL? = nil,
                       verificationHandler: DeveloperPortal.VerificationHandler? = nil) async throws -> AuthSession
 """
     compatibility_overload = """    // Keep the original protocol-compatible overload for callers that do not
@@ -78,6 +79,7 @@ public extension DeveloperPortal {
             xcodeVersion: xcodeVersion,
             machinePassword: machinePassword,
             anisetteDataProvider: nil,
+            grandSlamServiceURL: nil,
             verificationHandler: verificationHandler
         )
     }
@@ -101,6 +103,21 @@ public extension DeveloperPortal {
                 return try await provider()
             }
             return anisetteData
+        }
+        let resolvedGrandSlamServiceURL: URL
+        if let grandSlamServiceURL {
+            resolvedGrandSlamServiceURL = grandSlamServiceURL
+        } else {
+            do {
+                resolvedGrandSlamServiceURL = try await resolveGrandSlamServiceURL(
+                    anisetteData: anisetteData,
+                    xcodeVersion: xcodeVersion
+                )
+            } catch {
+                let nsError = error as NSError
+                debugLog("[SideSign] GrandSlam lookup unavailable (\(nsError.domain):\(nsError.code)); using static GsService2 for this authentication state machine")
+                resolvedGrandSlamServiceURL = Constants.URLs.grandSlamAuth
+            }
         }
         debugLog("[SideSign] Starting authenticate...")
 """,
@@ -135,6 +152,7 @@ public extension DeveloperPortal {
                 xcodeVersion: xcodeVersion,
                 machinePassword: machinePassword,
                 anisetteDataProvider: anisetteDataProvider,
+                grandSlamServiceURL: resolvedGrandSlamServiceURL,
                 verificationHandler: verificationHandler
             )
 """,
@@ -163,7 +181,8 @@ public extension DeveloperPortal {
         text,
         """            return try await authenticate(appleID: unsanitizedAppleID, password: password, anisetteData: anisetteData, xcodeVersion: xcodeVersion, machinePassword: machinePassword, verificationHandler: verificationHandler)
 """,
-        """            let smsAnisetteData = try await refreshAnisetteData()
+        """            debugLog("[SideSign] SMS 2FA complete; refreshing Anisette for post-2FA login")
+            let smsAnisetteData = try await refreshAnisetteData()
             return try await authenticate(
                 appleID: unsanitizedAppleID,
                 password: password,
@@ -171,10 +190,247 @@ public extension DeveloperPortal {
                 xcodeVersion: xcodeVersion,
                 machinePassword: machinePassword,
                 anisetteDataProvider: anisetteDataProvider,
+                grandSlamServiceURL: resolvedGrandSlamServiceURL,
                 verificationHandler: verificationHandler
             )
 """,
         "refresh Anisette after SMS 2FA",
+    )
+
+    text = replace_once(
+        text,
+        """            anisetteData: anisetteData,
+            xcodeVersion: xcodeVersion,
+            phase: "init"
+""",
+        """            anisetteData: anisetteData,
+            xcodeVersion: xcodeVersion,
+            serviceURL: resolvedGrandSlamServiceURL,
+            phase: "init"
+""",
+        "reuse cached GrandSlam URL for init",
+    )
+
+    text = replace_once(
+        text,
+        """            anisetteData: anisetteData,
+            xcodeVersion: xcodeVersion,
+            closeConnection: true,
+            phase: "complete"
+""",
+        """            anisetteData: anisetteData,
+            xcodeVersion: xcodeVersion,
+            serviceURL: resolvedGrandSlamServiceURL,
+            closeConnection: true,
+            phase: "complete"
+""",
+        "reuse cached GrandSlam URL for complete",
+    )
+
+    text = replace_once(
+        text,
+        """            let app = Constants.authApp
+            guard let checksum = CryptoUtilities.hmacSHA256(key: sessionKey, strings: ["apptokens", dsid, app]) else {
+""",
+        """            // iLoader obtains fresh Anisette again for get_app_token(),
+            // instead of reusing the OTP consumed by the post-2FA SRP login.
+            let appTokenAnisetteData = try await refreshAnisetteData()
+            let appTokenClientDictionary: [String: any Sendable] = [
+                "bootstrap": "true",
+                "icscrec": "true",
+                "loc": "en_US",
+                "pbe": "false",
+                "prkgen": "true",
+                "svct": Constants.grandSlamService,
+                "X-Mme-Device-Id": appTokenAnisetteData.deviceUniqueIdentifier,
+                "X-Apple-I-MD": appTokenAnisetteData.oneTimePassword,
+                "X-Apple-I-MD-M": appTokenAnisetteData.machineID
+            ]
+
+            let app = Constants.authApp
+            guard let checksum = CryptoUtilities.hmacSHA256(key: sessionKey, strings: ["apptokens", dsid, app]) else {
+""",
+        "refresh Anisette before app-token request",
+    )
+
+    text = replace_once(
+        text,
+        """                "checksum": checksum,
+                "cpd": clientDictionary,
+                "o": "apptokens",
+""",
+        """                "checksum": checksum,
+                "cpd": appTokenClientDictionary,
+                "o": "apptokens",
+""",
+        "use fresh Anisette CPD for app-token request",
+    )
+
+    text = replace_once(
+        text,
+        """                sessionKey: sessionKey,
+                anisetteData: anisetteData,
+                xcodeVersion: xcodeVersion
+            )
+            let session = Session(
+""",
+        """                sessionKey: sessionKey,
+                anisetteData: appTokenAnisetteData,
+                xcodeVersion: xcodeVersion
+            )
+            var session = Session(
+""",
+        "use fresh Anisette for app-token transport",
+    )
+
+    text = replace_once(
+        text,
+        """                anisetteData: appTokenAnisetteData,
+                xcodeVersion: xcodeVersion
+            )
+            var session = Session(
+""",
+        """                anisetteData: appTokenAnisetteData,
+                xcodeVersion: xcodeVersion,
+                serviceURL: resolvedGrandSlamServiceURL
+            )
+            var session = Session(
+""",
+        "reuse cached GrandSlam URL for app-token request",
+    )
+
+    text = replace_once(
+        text,
+        """                authToken: fetchedToken.token,
+                anisetteData: anisetteData,
+                xcodeVersion: xcodeVersion,
+""",
+        """                authToken: fetchedToken.token,
+                anisetteData: appTokenAnisetteData,
+                xcodeVersion: xcodeVersion,
+""",
+        "seed session with app-token Anisette",
+    )
+
+    text = replace_once(
+        text,
+        """            let account = try await fetchAccount(session: session)
+            return AuthSession(account: account, session: session)
+""",
+        """            // iLoader refreshes Anisette for every Developer Portal request.
+            // Refresh once more before SideStore's mandatory viewDeveloper lookup.
+            session.anisetteData = try await refreshAnisetteData()
+            do {
+                let account = try await fetchAccount(session: session)
+                return AuthSession(account: account, session: session)
+            } catch {
+                let nsError = error as NSError
+                throw NSError(
+                    domain: "SideSign.DeveloperPortal.account",
+                    code: nsError.code,
+                    userInfo: [
+                        NSLocalizedDescriptionKey: "Apple Developer account lookup failed (\(nsError.domain):\(nsError.code)).",
+                        NSUnderlyingErrorKey: nsError
+                    ]
+                )
+            }
+""",
+        "refresh Anisette and classify post-login account lookup",
+    )
+
+    text = replace_once(
+        text,
+        """        guard let appTokens = tokensDictionary["t"] as? [String: any Sendable],
+              let tokens = appTokens[app] as? [String: any Sendable],
+""",
+        """        guard let appTokenStatus = gsaIntegerValue(tokensDictionary["status-code"]) else {
+            throw NSError(
+                domain: "SideSign.GSA.apptokens",
+                code: -2204,
+                userInfo: [NSLocalizedDescriptionKey: "Apple GSA app-token payload omitted status-code."]
+            )
+        }
+        guard appTokenStatus == HTTPStatusCodes.ok else {
+            throw NSError(
+                domain: "SideSign.GSA.apptokens",
+                code: appTokenStatus,
+                userInfo: [NSLocalizedDescriptionKey: "Apple GSA app-token payload returned status-code \(appTokenStatus)."]
+            )
+        }
+
+        guard let appTokens = tokensDictionary["t"] as? [String: any Sendable],
+              let tokens = appTokens[app] as? [String: any Sendable],
+""",
+        "validate decrypted app-token status like iLoader",
+    )
+
+    text = replace_once(
+        text,
+        """        anisetteData: AnisetteData,
+        xcodeVersion: String
+    ) async throws -> FetchedAuthToken {
+""",
+        """        anisetteData: AnisetteData,
+        xcodeVersion: String,
+        serviceURL: URL
+    ) async throws -> FetchedAuthToken {
+""",
+        "thread cached GrandSlam URL into app-token helper",
+    )
+
+    text = replace_once(
+        text,
+        """            anisetteData: anisetteData,
+            xcodeVersion: xcodeVersion,
+            phase: "apptokens"
+""",
+        """            anisetteData: anisetteData,
+            xcodeVersion: xcodeVersion,
+            serviceURL: serviceURL,
+            phase: "apptokens"
+""",
+        "reuse cached GrandSlam URL inside app-token helper",
+    )
+
+    text = replace_once(
+        text,
+        """        xcodeVersion: String? = nil,
+        closeConnection: Bool = false,
+        phase: String = "unknown"
+""",
+        """        xcodeVersion: String? = nil,
+        serviceURL: URL? = nil,
+        closeConnection: Bool = false,
+        phase: String = "unknown"
+""",
+        "accept cached GrandSlam URL in request helper",
+    )
+
+    text = replace_once(
+        text,
+        """        let requestURL: URL
+        do {
+            requestURL = try await resolveGrandSlamServiceURL(anisetteData: anisetteData, xcodeVersion: xcodeVersion)
+        } catch {
+            let nsError = error as NSError
+            debugLog("[SideSign] GrandSlam lookup unavailable (\(nsError.domain):\(nsError.code)); falling back to static GsService2")
+            requestURL = Constants.URLs.grandSlamAuth
+        }
+""",
+        """        let requestURL: URL
+        if let serviceURL {
+            requestURL = serviceURL
+        } else {
+            do {
+                requestURL = try await resolveGrandSlamServiceURL(anisetteData: anisetteData, xcodeVersion: xcodeVersion)
+            } catch {
+                let nsError = error as NSError
+                debugLog("[SideSign] GrandSlam lookup unavailable (\(nsError.domain):\(nsError.code)); falling back to static GsService2")
+                requestURL = Constants.URLs.grandSlamAuth
+            }
+        }
+""",
+        "reuse one GrandSlam URL bag resolution per authentication state machine",
     )
 
     text = replace_between(
@@ -267,8 +523,13 @@ public extension DeveloperPortal {
                 }
 
                 guard (200...299).contains(verifyStatusCode) else {
-                    lastError = "Apple trusted-device verification returned HTTP \(verifyStatusCode)."
-                    continue
+                    throw NSError(
+                        domain: "SideSign.GSA.trustedDevice.verify",
+                        code: verifyStatusCode == 0 ? -3202 : verifyStatusCode,
+                        userInfo: [
+                            NSLocalizedDescriptionKey: "Apple trusted-device verification returned HTTP \(verifyStatusCode)."
+                        ]
+                    )
                 }
 
                 return
@@ -759,10 +1020,16 @@ public extension DeveloperPortal {
                 // iLoader treats every successful 2xx response as completion;
                 // Apple does not guarantee a PE-token header on this endpoint.
                 guard (200...299).contains(verifyStatusCode) else {
-                    lastError = "Apple SMS verification returned HTTP \(verifyStatusCode)."
-                    continue
+                    throw NSError(
+                        domain: "SideSign.GSA.sms.verify",
+                        code: verifyStatusCode == 0 ? -3202 : verifyStatusCode,
+                        userInfo: [
+                            NSLocalizedDescriptionKey: "Apple SMS verification returned HTTP \(verifyStatusCode)."
+                        ]
+                    )
                 }
 
+                debugLog("[SideSign] SMS 2FA verification accepted; returning NeedsLogin-equivalent state")
                 return
 
             case .requestPhone(let targetPhoneID, let deliveryMode):

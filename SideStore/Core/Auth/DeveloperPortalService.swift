@@ -112,10 +112,47 @@ private final class AuthSubstageTraceStore {
     }
 }
 
+private func classifiedAuthStage(for error: Error, fallback: String) -> String {
+    var currentError: NSError? = error as NSError
+    var domains: [String] = []
+    var visited = Set<ObjectIdentifier>()
+
+    while let nsError = currentError {
+        let identity = ObjectIdentifier(nsError)
+        guard visited.insert(identity).inserted else { break }
+        domains.append(nsError.domain)
+        currentError = nsError.userInfo[NSUnderlyingErrorKey] as? NSError
+    }
+
+    if domains.contains(where: { $0 == "SideSign.DeveloperPortal.account" }) {
+        return "developer_portal_account"
+    }
+    if domains.contains(where: {
+        $0 == "SideSign.GSA.sms.verify" || $0 == "SideSign.GSA.trustedDevice.verify"
+    }) {
+        return "two_factor_verify"
+    }
+    if domains.contains(where: {
+        $0 == "SideSign.GSA.trustedPhones"
+            || $0 == "SideSign.GSA.sms"
+            || $0 == "SideSign.GSA.trustedDevice"
+    }) {
+        return "two_factor"
+    }
+    if domains.contains(where: { $0 == "SideSign.GSA.apptokens" }) {
+        return "app_token"
+    }
+    if domains.contains(where: { $0 == "SideSign.GSA.init" || $0 == "SideSign.GSA.complete" }) {
+        return "gsa_srp"
+    }
+    return fallback
+}
+
 private func stagedAuthError(_ error: Error, stage: String) -> NSError {
     let nsError = error as NSError
+    let effectiveStage = classifiedAuthStage(for: error, fallback: stage)
     var userInfo = nsError.userInfo
-    userInfo[sideStoreAuthStageKey] = stage
+    userInfo[sideStoreAuthStageKey] = effectiveStage
     userInfo[sideStoreAuthOriginalDomainKey] = nsError.domain
     userInfo[sideStoreAuthOriginalCodeKey] = nsError.code
     // Preserve the original NSError so UI diagnostics can surface the real domain/code
@@ -270,7 +307,19 @@ class DeveloperPortalAuthService: DeveloperPortalService {
                 }
                 AuthSubstageTraceStore.shared.markEvent("two_factor_requested", metadata: modeName)
                 debugLog("[AuthStage] two_factor requested mode=\(modeName)")
-                originalHandler(mode, completionHandler)
+                originalHandler(mode) { action in
+                    let actionName: String
+                    switch action {
+                    case .code:
+                        actionName = "code_submitted"
+                    case .requestPhone:
+                        actionName = "delivery_requested"
+                    case .cancel:
+                        actionName = "cancelled"
+                    }
+                    AuthSubstageTraceStore.shared.markEvent("two_factor_action", metadata: actionName)
+                    completionHandler(action)
+                }
             }
         }
 
