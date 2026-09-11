@@ -22,6 +22,40 @@ def main() -> int:
     text = TARGET.read_text(encoding="utf-8")
     before = hashlib.sha256(text.encode("utf-8")).hexdigest()
 
+    old_client_dictionary = '''        let clientDictionary: [String: any Sendable] = [
+            "bootstrap": true,
+            "icscrec": true,
+            "pbe": false,
+            "prkgen": true,
+            "svct": Constants.grandSlamService,
+            "loc": anisetteData.locale.identifier.components(separatedBy: "@").first ?? "en_US",
+            "X-Apple-Locale": anisetteData.locale.identifier.components(separatedBy: "@").first ?? "en_US",
+            "X-Apple-I-MD": anisetteData.oneTimePassword,
+            "X-Apple-I-MD-M": anisetteData.machineID,
+            "X-Mme-Device-Id": anisetteData.deviceUniqueIdentifier,
+            "X-Apple-I-MD-LU": anisetteData.localUserID,
+            "X-Apple-I-MD-RINFO": anisetteData.routingInfo,
+            "X-Apple-I-SRL-NO": anisetteData.deviceSerialNumber,
+            "X-Apple-I-Client-Time": formatDate(anisetteData.date),
+            "X-Apple-I-TimeZone": anisetteData.timeZone.abbreviation(for: anisetteData.date) ?? "PST"
+        ]
+'''
+    new_client_dictionary = '''        // Match iLoader 2.3.3's GrandSlam CPD shape and value types.
+        // The base request headers carry the Xcode/App-Info fingerprint; CPD only
+        // contains the three device identity fields used by iLoader.
+        let clientDictionary: [String: any Sendable] = [
+            "bootstrap": "true",
+            "icscrec": "true",
+            "loc": "en_US",
+            "pbe": "false",
+            "prkgen": "true",
+            "svct": Constants.grandSlamService,
+            "X-Mme-Device-Id": anisetteData.deviceUniqueIdentifier,
+            "X-Apple-I-MD": anisetteData.oneTimePassword,
+            "X-Apple-I-MD-M": anisetteData.machineID
+        ]
+'''
+    text = replace_once(text, old_client_dictionary, new_client_dictionary, "align GrandSlam CPD with iLoader 2.3.3")
     text = replace_once(
         text,
         '        let initResponse = try await sendAuthenticationRequest(parameters: initParameters, anisetteData: anisetteData)',
@@ -193,6 +227,132 @@ def main() -> int:
         }
 '''
     text = replace_once(text, old_diagnostics, new_diagnostics, "make auth diagnostics credential-safe")
+
+    old_network_catch = '''        } catch {
+            debugLog("[SideSign] sendAuthenticationRequest network error: \\(error)")
+            throw error
+        }
+'''
+    new_network_catch = '''        } catch {
+            let nsError = error as NSError
+            debugLog("[SideSign] GSA phase=\\(phase) network error: \\(nsError.domain):\\(nsError.code)")
+            throw NSError(
+                domain: "SideSign.GSA.\\(phase)",
+                code: -1000,
+                userInfo: [
+                    NSLocalizedDescriptionKey: "Apple GSA \\(phase) network request failed (\\(nsError.domain):\\(nsError.code)).",
+                    NSUnderlyingErrorKey: nsError
+                ]
+            )
+        }
+'''
+    text = replace_once(text, old_network_catch, new_network_catch, "surface GSA network phase")
+
+    diagnostic_error_replacements = [
+        (
+            '''            throw ServerError.badServerResponse(
+                reason: "Auth endpoint returned empty response (HTTP \\(statusCode))",
+                jsonPayload: "contentType=\\(contentType), bytes=0"
+            )''',
+            '''            throw NSError(
+                domain: "SideSign.GSA.\\(phase)",
+                code: -1001,
+                userInfo: [
+                    NSLocalizedDescriptionKey: "Apple GSA \\(phase) returned an empty response (HTTP \\(statusCode), bytes=0)."
+                ]
+            )''',
+            "surface empty GSA response",
+        ),
+        (
+            '''            throw ServerError.invalidResponseFormat(
+                rawPayload: "HTTP \\(statusCode), contentType=\\(contentType), bytes=\\(data.count)"
+            )''',
+            '''            throw NSError(
+                domain: "SideSign.GSA.\\(phase)",
+                code: -1002,
+                userInfo: [
+                    NSLocalizedDescriptionKey: "Apple GSA \\(phase) returned a non-plist response (HTTP \\(statusCode), bytes=\\(data.count))."
+                ]
+            )''',
+            "surface GSA response format",
+        ),
+        (
+            '''            throw ServerError.missingKey(
+                key: "Status",
+                jsonPayload: "HTTP \\(statusCode), contentType=\\(contentType), bytes=\\(data.count)"
+            )''',
+            '''            throw NSError(
+                domain: "SideSign.GSA.\\(phase)",
+                code: -1003,
+                userInfo: [
+                    NSLocalizedDescriptionKey: "Apple GSA \\(phase) response omitted Status (HTTP \\(statusCode), bytes=\\(data.count))."
+                ]
+            )''',
+            "surface missing GSA status",
+        ),
+    ]
+    for old, new, label in diagnostic_error_replacements:
+        text = replace_once(text, old, new, label)
+
+    phase_error_replacements = [
+        (
+            '            throw ServerError.badServerResponse(reason: "Auth init response missing c/s/i/B parameters", jsonPayload: payload)',
+            '            throw NSError(domain: "SideSign.GSA.init", code: -2001, userInfo: [NSLocalizedDescriptionKey: "Apple GSA init response was missing SRP fields (c/s/i/B)."])',
+            "surface init SRP fields",
+        ),
+        (
+            '            throw ServerError.missingKey(key: "spd", jsonPayload: payload)',
+            '            throw NSError(domain: "SideSign.GSA.complete", code: -2002, userInfo: [NSLocalizedDescriptionKey: "Apple GSA complete response was missing SPD data."])',
+            "surface missing SPD",
+        ),
+        (
+            '            throw ServerError.missingKey(key: "M2", jsonPayload: payload)',
+            '            throw NSError(domain: "SideSign.GSA.complete", code: -2003, userInfo: [NSLocalizedDescriptionKey: "Apple GSA complete response was missing the server proof M2."])',
+            "surface missing M2",
+        ),
+        (
+            '            throw ServerError.invalidResponseFormat(rawPayload: rawDecrypted)',
+            '            throw NSError(domain: "SideSign.GSA.complete", code: -2004, userInfo: [NSLocalizedDescriptionKey: "Apple GSA SPD payload could not be decoded."])',
+            "surface SPD format",
+        ),
+        (
+            '            throw ServerError.missingKey(key: "adsid", jsonPayload: jsonStr)',
+            '            throw NSError(domain: "SideSign.GSA.complete", code: -2005, userInfo: [NSLocalizedDescriptionKey: "Apple GSA SPD payload was missing the account identifier."])',
+            "surface missing account id",
+        ),
+        (
+            '            throw ServerError.missingKey(key: "GsIdmsToken", jsonPayload: jsonStr)',
+            '            throw NSError(domain: "SideSign.GSA.complete", code: -2006, userInfo: [NSLocalizedDescriptionKey: "Apple GSA SPD payload was missing the IDMS token."])',
+            "surface missing IDMS token",
+        ),
+        (
+            '            throw ServerError.missingKey(key: "sk", jsonPayload: prettyJSONString(from: decryptedDictionary))',
+            '            throw NSError(domain: "SideSign.GSA.apptokens", code: -2101, userInfo: [NSLocalizedDescriptionKey: "Apple GSA SPD payload was missing the session key."])',
+            "surface missing session key",
+        ),
+        (
+            '            throw ServerError.missingKey(key: "c", jsonPayload: prettyJSONString(from: decryptedDictionary))',
+            '            throw NSError(domain: "SideSign.GSA.apptokens", code: -2102, userInfo: [NSLocalizedDescriptionKey: "Apple GSA SPD payload was missing the app-token challenge."])',
+            "surface missing app-token challenge",
+        ),
+        (
+            '            throw ServerError.missingKey(key: "et", jsonPayload: payload)',
+            '            throw NSError(domain: "SideSign.GSA.apptokens", code: -2201, userInfo: [NSLocalizedDescriptionKey: "Apple GSA app-token response was missing encrypted token data."])',
+            "surface missing encrypted token",
+        ),
+        (
+            '            throw ServerError.invalidResponseFormat(rawPayload: rawStr)',
+            '            throw NSError(domain: "SideSign.GSA.apptokens", code: -2202, userInfo: [NSLocalizedDescriptionKey: "Apple GSA app-token payload could not be decoded."])',
+            "surface app-token format",
+        ),
+        (
+            '            throw ServerError.missingKey(key: "t/\\(app)/token", jsonPayload: payload)',
+            '            throw NSError(domain: "SideSign.GSA.apptokens", code: -2203, userInfo: [NSLocalizedDescriptionKey: "Apple GSA app-token payload was missing the token field."])',
+            "surface missing app token",
+        ),
+    ]
+    for old, new, label in phase_error_replacements:
+        text = replace_once(text, old, new, label)
 
     old_token = '''    private func fetchAuthToken(app: String, parameters: [String: any Sendable], sessionKey: Data, anisetteData: AnisetteData) async throws -> FetchedAuthToken {
         let responseDictionary = try await sendAuthenticationRequest(parameters: parameters, anisetteData: anisetteData)
