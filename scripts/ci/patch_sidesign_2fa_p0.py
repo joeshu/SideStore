@@ -400,7 +400,7 @@ public extension DeveloperPortal {
         let statusCode = httpResponse?.safeStatusCode ?? 0
         let contentType = httpResponse?.value(forHTTPHeaderField: "Content-Type") ?? "unknown"
 
-        guard statusCode == HTTPStatusCodes.ok, let responseDictionary = parsePlistOrJSON(data) else {
+        guard (statusCode == HTTPStatusCodes.ok || statusCode == 201), let responseDictionary = parsePlistOrJSON(data) else {
             throw NSError(
                 domain: "SideSign.GSA.trustedPhones",
                 code: statusCode == 0 ? -3001 : statusCode,
