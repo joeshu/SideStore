@@ -28,7 +28,8 @@ def main() -> int:
         '''        let initResponse = try await sendAuthenticationRequest(
             parameters: initParameters,
             anisetteData: anisetteData,
-            xcodeVersion: xcodeVersion
+            xcodeVersion: xcodeVersion,
+            phase: "init"
         )''',
         "thread xcodeVersion into SRP init",
     )
@@ -40,7 +41,8 @@ def main() -> int:
             parameters: completeParameters,
             anisetteData: anisetteData,
             xcodeVersion: xcodeVersion,
-            closeConnection: true
+            closeConnection: true,
+            phase: "complete"
         )''',
         "thread xcodeVersion/Connection-close into SRP complete",
     )
@@ -67,10 +69,10 @@ def main() -> int:
         request.setValue("text/x-xml-plist", forHTTPHeaderField: "Accept")
         request.setValue(anisetteData.deviceDescription, forHTTPHeaderField: "X-MMe-Client-Info")
         request.setValue(Constants.userAgent, forHTTPHeaderField: "User-Agent")
-        if let xcodeVersion = xcodeVersion {
-            request.setValue(xcodeVersion, forHTTPHeaderField: "X-Xcode-Version")
-        }
+        request.setValue("27.0 (27A5218g)", forHTTPHeaderField: "X-Xcode-Version")
         request.setValue(Constants.authApp, forHTTPHeaderField: "X-Apple-App-Info")
+        request.cachePolicy = .reloadIgnoringLocalCacheData
+        request.setValue("close", forHTTPHeaderField: "Connection")
 
         let (data, response) = try await session.data(for: request)
         let httpResponse = response as? HTTPURLResponse
@@ -104,7 +106,8 @@ def main() -> int:
         parameters requestParameters: [String: any Sendable],
         anisetteData: AnisetteData,
         xcodeVersion: String? = nil,
-        closeConnection: Bool = false
+        closeConnection: Bool = false,
+        phase: String = "unknown"
     ) async throws -> [String: any Sendable] {
         let requestURL: URL
         do {
@@ -133,12 +136,10 @@ def main() -> int:
             "X-Apple-App-Info": Constants.authApp
         ]
         headers.forEach { request.setValue($1, forHTTPHeaderField: $0) }
-        if let xcodeVersion = xcodeVersion {
-            request.setValue(xcodeVersion, forHTTPHeaderField: "X-Xcode-Version")
-        }
-        if closeConnection {
-            request.setValue("close", forHTTPHeaderField: "Connection")
-        }
+        request.setValue("27.0 (27A5218g)", forHTTPHeaderField: "X-Xcode-Version")
+        request.cachePolicy = .reloadIgnoringLocalCacheData
+        request.setValue("close", forHTTPHeaderField: "Connection")
+        debugLog("[SideSign] GSA phase=\(phase), xcode=27.0 (27A5218g), requestedClose=\(closeConnection)")
 '''
     text = replace_once(text, old_headers, new_headers, "align GrandSlam request headers")
 
@@ -206,10 +207,54 @@ def main() -> int:
         let responseDictionary = try await sendAuthenticationRequest(
             parameters: parameters,
             anisetteData: anisetteData,
-            xcodeVersion: xcodeVersion
+            xcodeVersion: xcodeVersion,
+            phase: "apptokens"
         )
 '''
     text = replace_once(text, old_token, new_token, "thread xcodeVersion through fetchAuthToken")
+
+
+    old_error_mapping = '''        let errorCode = status["ec"] as? Int ?? 0
+        if errorCode != 0 {
+            let errorDesc = status["em"] as? String
+            debugLog("[SideSign] Auth endpoint returned error code \(errorCode): \(errorDesc ?? "No error message")")
+            switch errorCode {
+            case GrandSlamAuthErrorCodes.incorrectCredentials:
+                throw DeveloperPortalError.incorrectCredentials(cause: errorDesc)
+            case GrandSlamAuthErrorCodes.appSpecificPasswordRequired,
+                 GrandSlamAuthErrorCodes.appSpecificPasswordRequiredFallback:
+                throw DeveloperPortalError.appSpecificPasswordRequired(cause: errorDesc)
+            case GrandSlamAuthErrorCodes.incorrectVerificationCode:
+                throw DeveloperPortalError.incorrectVerificationCode(cause: errorDesc)
+            default:
+                throw ServerError.underlyingError(code: errorCode, message: errorDesc ?? "Authentication failed")
+            }
+        }
+'''
+    new_error_mapping = '''        let errorCode = status["ec"] as? Int ?? 0
+        if errorCode != 0 {
+            let errorDesc = status["em"] as? String
+            debugLog("[SideSign] GSA phase=\(phase) rejected request: HTTP \(statusCode), ec=\(errorCode), emPresent=\(errorDesc != nil)")
+            switch errorCode {
+            case GrandSlamAuthErrorCodes.incorrectCredentials:
+                throw DeveloperPortalError.incorrectCredentials(cause: errorDesc)
+            case GrandSlamAuthErrorCodes.appSpecificPasswordRequired,
+                 GrandSlamAuthErrorCodes.appSpecificPasswordRequiredFallback:
+                throw DeveloperPortalError.appSpecificPasswordRequired(cause: errorDesc)
+            case GrandSlamAuthErrorCodes.incorrectVerificationCode:
+                throw DeveloperPortalError.incorrectVerificationCode(cause: errorDesc)
+            default:
+                throw NSError(
+                    domain: "SideSign.GSA.\(phase)",
+                    code: errorCode,
+                    userInfo: [
+                        NSLocalizedDescriptionKey: "Apple GSA \(phase) rejected the request (HTTP \(statusCode), ec \(errorCode))."
+                    ]
+                )
+            }
+        }
+'''
+    text = replace_once(text, old_error_mapping, new_error_mapping, "surface credential-safe GSA phase/error code")
 
     after = hashlib.sha256(text.encode("utf-8")).hexdigest()
     if before == after:
