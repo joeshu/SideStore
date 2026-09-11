@@ -14,6 +14,12 @@ def replace_once(text: str, old: str, new: str, label: str) -> str:
     return text.replace(old, new, 1)
 
 
+def replace_first(text: str, old: str, new: str, label: str) -> str:
+    if old not in text:
+        raise RuntimeError(f"{label}: anchor not found")
+    return text.replace(old, new, 1)
+
+
 def replace_between(text: str, start: str, end: str, new: str, label: str) -> str:
     start_index = text.find(start)
     if start_index < 0:
@@ -117,7 +123,7 @@ public extension DeveloperPortal {
         "thread Anisette provider into trusted-device 2FA",
     )
 
-    text = replace_once(
+    text = replace_first(
         text,
         """            return try await authenticate(appleID: unsanitizedAppleID, password: password, anisetteData: anisetteData, xcodeVersion: xcodeVersion, machinePassword: machinePassword, verificationHandler: verificationHandler)
 """,
