@@ -266,7 +266,7 @@ public extension DeveloperPortal {
                     )
                 }
 
-                guard verifyStatusCode == HTTPStatusCodes.ok else {
+                guard (200...299).contains(verifyStatusCode) else {
                     lastError = "Apple trusted-device verification returned HTTP \(verifyStatusCode)."
                     continue
                 }
@@ -756,16 +756,10 @@ public extension DeveloperPortal {
                     )
                 }
 
-                guard verifyStatusCode == HTTPStatusCodes.ok else {
+                // iLoader treats every successful 2xx response as completion;
+                // Apple does not guarantee a PE-token header on this endpoint.
+                guard (200...299).contains(verifyStatusCode) else {
                     lastError = "Apple SMS verification returned HTTP \(verifyStatusCode)."
-                    continue
-                }
-
-                let hasPEToken = verifyHttpResponse?.allHeaderFields.keys.contains(where: {
-                    ($0 as? String)?.lowercased() == "x-apple-pe-token"
-                }) == true
-                guard hasPEToken else {
-                    lastError = "Apple accepted the request but did not return a verification session token."
                     continue
                 }
 
