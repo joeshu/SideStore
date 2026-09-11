@@ -318,6 +318,13 @@ private extension AuthenticationViewController
         diagnosticParts.append("[\(error.domain):\(error.code)]")
         if let underlying {
             diagnosticParts.append("Underlying [\(underlying.domain):\(underlying.code)]")
+            // SideSign.GSA errors are intentionally credential-safe; expose their
+            // HTTP/phase description so transport failures are actionable.
+            if underlying.domain.hasPrefix("SideSign.GSA."),
+               let detail = underlying.userInfo[NSLocalizedDescriptionKey] as? String,
+               !detail.isEmpty {
+                diagnosticParts.append(detail)
+            }
         }
 
         debugLog(
