@@ -329,7 +329,6 @@ class DeveloperPortalAuthService: DeveloperPortalService {
                 password: password,
                 anisetteData: anisetteData,
                 xcodeVersion: xcodeVersion,
-                anisetteDataProvider: anisetteDataProvider,
                 verificationHandler: stagedVerificationHandler
             )
             AuthSubstageTraceStore.shared.finish("apple_authenticate", startedAt: startedAt)
