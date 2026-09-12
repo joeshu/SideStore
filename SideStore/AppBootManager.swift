@@ -40,8 +40,14 @@ public final class AppBootManager {
         
         while true {
             do {
-                let udid = try await fetchUDID()
-                debugLog("[AppBootManager] UDID validation succeeded attempt=\(attempt) udidPresent=\(udid != nil)")
+                guard let udid = try await fetchUDID(), !udid.isEmpty else {
+                    throw NSError(
+                        domain: "SideStore.UDIDValidation",
+                        code: 1,
+                        userInfo: [NSLocalizedDescriptionKey: "Dynamic device UDID is not available yet"]
+                    )
+                }
+                debugLog("[AppBootManager] UDID validation succeeded attempt=\(attempt) udidPresent=true")
                 return udid
             } catch {
                 if case MinimuxerError.invalidPairing = error {
