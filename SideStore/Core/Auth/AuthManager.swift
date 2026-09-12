@@ -100,8 +100,22 @@ public final class AuthManager: @unchecked Sendable {
         return try await self.portalService.fetchAccount(session: session)
     }
     
-    public func authenticate(appleID: String, password: String, anisetteData: ALTAnisetteData, xcodeVersion: String, verificationHandler: DeveloperPortal.VerificationHandler?) async throws -> (ALTAccount, ALTAppleAPISession) {
-        return try await self.portalService.authenticate(appleID: appleID, password: password, anisetteData: anisetteData, xcodeVersion: xcodeVersion, verificationHandler: verificationHandler)
+    public func authenticate(
+        appleID: String,
+        password: String,
+        anisetteData: ALTAnisetteData,
+        xcodeVersion: String,
+        anisetteDataProvider: (@Sendable () async throws -> ALTAnisetteData)? = nil,
+        verificationHandler: DeveloperPortal.VerificationHandler? = nil
+    ) async throws -> (ALTAccount, ALTAppleAPISession) {
+        return try await self.portalService.authenticate(
+            appleID: appleID,
+            password: password,
+            anisetteData: anisetteData,
+            xcodeVersion: xcodeVersion,
+            anisetteDataProvider: anisetteDataProvider,
+            verificationHandler: verificationHandler
+        )
     }
     
     public func authenticateWithToken(adsid: String, xcodeToken: String, anisetteData: ALTAnisetteData, xcodeVersion: String) async throws -> (ALTAccount, ALTAppleAPISession) {
