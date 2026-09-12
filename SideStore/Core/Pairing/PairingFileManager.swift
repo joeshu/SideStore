@@ -13,6 +13,21 @@ import MinimuxerCommon
 final class PairingFileManager: NSObject {
     static let shared = PairingFileManager()
     static let pairingFileName = AppConstants.Pairing.fileName
+    private static let hardwareUDIDKeys: Set<String> = ["udid", "uniquedeviceid"]
+
+    /// Apple hardware UDIDs used by Developer Portal are exactly 40 hex digits.
+    /// RPPairing's `identifier` is a pairing/session identity, not a device UDID.
+    static func validatedHardwareUDID(_ value: Any?) -> String? {
+        guard let value = value as? String else { return nil }
+        let udid = value.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard udid.count == 40,
+              udid.unicodeScalars.allSatisfy({
+                  ($0.value >= 48 && $0.value <= 57) ||
+                  ($0.value >= 65 && $0.value <= 70) ||
+                  ($0.value >= 97 && $0.value <= 102)
+              }) else { return nil }
+        return udid.uppercased()
+    }
 
     private var completion: ((URL?) -> Void)?
 
@@ -23,17 +38,12 @@ final class PairingFileManager: NSObject {
         }
         do {
             let pairing = try PairingFileParser.parse(content: contents)
-            if pairing is RPPairingFile {
-                // A Remote Pairing file's `identifier` is the pairing/session identity,
-                // not the device hardware UDID. The real UDID must be queried from
-                // lockdownd over the established RSD connection via fetchUDID().
-                debugLog("[PairingFile] pairingUDID: Remote Pairing file has no static hardware UDID; use live device lookup")
-                return nil
+            // iLoader may merge Lockdown data into an RPPairing plist.
+            // Inspect only top-level hardware-ID keys; never use `identifier`.
+            for (key, value) in pairing.plist where Self.hardwareUDIDKeys.contains(key.lowercased()) {
+                if let udid = Self.validatedHardwareUDID(value) { return udid }
             }
-            if let lockdown = pairing as? LockdownPairingFile {
-                return lockdown.udid
-            }
-            debugLog("[PairingFile] pairingUDID: unsupported pairing file type")
+            debugLog("[PairingFile] pairingUDID: no valid 40-hex hardware UDID in pairing file")
             return nil
         } catch {
             debugLog("[PairingFile] pairingUDID: failed to parse pairing file: \(error)")

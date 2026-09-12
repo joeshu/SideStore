@@ -279,9 +279,9 @@ private func fetchHardwareUDID() async throws -> String? {
     if minimuxer.gateway.pairingFileType == .rppairing {
         do {
             if let direct = try await minimuxer.gateway.getLockdownValue(key: "UniqueDeviceID"),
-               !direct.isEmpty {
+               let validated = PairingFileManager.validatedHardwareUDID(direct) {
                 debugLog("[SideStore] fetchUDID direct RSD lookup succeeded")
-                return direct
+                return validated
             }
             debugLog("[SideStore] fetchUDID direct RSD lookup returned no value")
         } catch {
@@ -302,8 +302,9 @@ func fetchUDID(useStatic: Bool = false) async throws -> String? {
     let result = try? await withRemotePairingRetry {
         try await fetchHardwareUDID()
     }
-    if let udid = result ?? nil, !udid.isEmpty, udid != "XXXXX-XXXX-XXXXX-XXXX" {
-        return udid
+    if let udid = result ?? nil,
+       let validated = PairingFileManager.validatedHardwareUDID(udid) {
+        return validated
     }
     if useStatic {
         return PairingFileManager.shared.pairingUDID
