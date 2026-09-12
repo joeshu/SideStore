@@ -5,6 +5,7 @@ from pathlib import Path
 import hashlib
 
 TARGET = Path("Dependencies/SideSign/Sources/DeveloperPortal/Authentication.swift")
+DEVELOPER_PORTAL_TARGET = Path("Dependencies/SideSign/Sources/DeveloperPortal/DeveloperPortalAPI.swift")
 
 
 def replace_once(text: str, old: str, new: str, label: str) -> str:
@@ -33,6 +34,8 @@ def replace_between(text: str, start: str, end: str, new: str, label: str) -> st
 def main() -> int:
     if not TARGET.is_file():
         raise RuntimeError(f"missing SideSign source: {TARGET}")
+    if not DEVELOPER_PORTAL_TARGET.is_file():
+        raise RuntimeError(f"missing SideSign developer portal source: {DEVELOPER_PORTAL_TARGET}")
 
     text = TARGET.read_text(encoding="utf-8")
     before = hashlib.sha256(text.encode("utf-8")).hexdigest()
@@ -625,10 +628,14 @@ public extension DeveloperPortal {
               }),
               let securityCode = payload["securityCode"] as? [String: any Sendable],
               integerValue(securityCode["length"]) == 6,
-              (payload["tooManyCodesSent"] as? Bool) == false,
-              (payload["tooManyCodesValidated"] as? Bool) == false,
-              (payload["securityCodeLocked"] as? Bool) == false,
-              (payload["securityCodeCooldown"] as? Bool) == false
+              ((securityCode["tooManyCodesSent"] as? Bool)
+                  ?? (payload["tooManyCodesSent"] as? Bool)) == false,
+              ((securityCode["tooManyCodesValidated"] as? Bool)
+                  ?? (payload["tooManyCodesValidated"] as? Bool)) == false,
+              ((securityCode["securityCodeLocked"] as? Bool)
+                  ?? (payload["securityCodeLocked"] as? Bool)) == false,
+              ((securityCode["securityCodeCooldown"] as? Bool)
+                  ?? (payload["securityCodeCooldown"] as? Bool)) == false
         else {
             return false
         }
@@ -1113,7 +1120,67 @@ public extension DeveloperPortal {
         raise RuntimeError("transform produced no change")
 
     TARGET.write_text(text, encoding="utf-8")
+
+    # iLoader's DeveloperSession prepends userLocale to every developer
+    # portal XML plist request. Apple can accept the authenticated session
+    # but return resultCode 3 from viewDeveloper.action when it is omitted.
+    developer_text = DEVELOPER_PORTAL_TARGET.read_text(encoding="utf-8")
+    developer_text = replace_once(
+        developer_text,
+        '            "clientId": Constants.clientID,\n            "protocolVersion": Constants.protocolVersion,\n            "requestId": UUID().uuidString.uppercased()\n',
+        '            "clientId": Constants.clientID,\n            "protocolVersion": Constants.protocolVersion,\n            "requestId": UUID().uuidString.uppercased(),\n            "userLocale": ["en_US"]\n',
+        "align developer portal userLocale with iLoader",
+    )
+
+    # DeveloperSession in the pinned iLoader/isideload commit inherits the
+    # RemoteV3 GrandSlam base fingerprint and adds only the three fresh
+    # Anisette identity headers, the DSID, and the Gs token.  URLSession's
+    # previous 26.x/Xcode header set can authenticate GSA but is rejected by
+    # viewDeveloper.action with resultCode 3.
+    developer_text = replace_once(
+        developer_text,
+        '''        let headers: [String: String] = [
+            "Content-Type": "text/x-xml-plist",
+            "User-Agent": Constants.xcodeUserAgent,
+            "Accept": "text/x-xml-plist",
+            "Accept-Language": "en-us",
+            "X-Apple-App-Info": Constants.authApp,
+            "X-Xcode-Version": apiSession.xcodeVersion,
+            "X-Apple-I-Identity-Id": apiSession.dsid,
+            "X-Apple-GS-Token": apiSession.authToken,
+            "X-Apple-I-MD-M": a.machineID,
+            "X-Apple-I-MD": a.oneTimePassword,
+            "X-Apple-I-MD-LU": a.localUserID,
+            "X-Apple-I-MD-RINFO": "\\(a.routingInfo)",
+            "X-Mme-Device-Id": a.deviceUniqueIdentifier,
+            "X-MMe-Client-Info": a.deviceDescription,
+            "X-Apple-I-Client-Time": formatDate(a.date),
+            "X-Apple-Locale": a.locale.identifier,
+            "X-Apple-I-Locale": a.locale.identifier,
+            "X-Apple-I-TimeZone": a.timeZone.abbreviation(for: a.date) ?? ""
+        ]
+''',
+        '''        // Match iLoader 2.3.3 DeveloperSession.get_headers() and the
+        // GrandSlam RemoteV3 base headers for every XML portal request.
+        let headers: [String: String] = [
+            "Content-Type": "text/x-xml-plist",
+            "Accept": "text/x-xml-plist",
+            "X-MMe-Client-Info": "<Mac15,7> <macOS;27.0;26A5378j> <com.apple.AuthKit/1 (com.apple.akd/1.0)>",
+            "User-Agent": "akd/1.0 CFNetwork/808.1.4",
+            "X-Xcode-Version": "27.0 (27A5218g)",
+            "X-Apple-App-Info": Constants.authApp,
+            "X-Apple-I-Identity-Id": apiSession.dsid,
+            "X-Apple-GS-Token": apiSession.authToken,
+            "X-Mme-Device-Id": a.deviceUniqueIdentifier,
+            "X-Apple-I-MD": a.oneTimePassword,
+            "X-Apple-I-MD-M": a.machineID
+        ]
+''',
+        "align developer portal headers with iLoader",
+    )
+    DEVELOPER_PORTAL_TARGET.write_text(developer_text, encoding="utf-8")
     print("P0 trusted-phone, fresh-Anisette, strict-412, and serviceErrors transforms applied")
+    print("Developer portal userLocale transform applied")
     print(f"source_sha256={before}")
     print(f"patched_sha256={after}")
     return 0
