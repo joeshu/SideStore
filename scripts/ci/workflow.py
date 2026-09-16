@@ -141,22 +141,26 @@ def clean_spm_cache():
 
 def apply_dependency_patches():
     minimuxer_dir = ROOT / "Dependencies/minimuxer"
-    patch_file = ROOT / "patches/minimuxer-rppairing-initialization.patch"
+    patch_files = (
+        ROOT / "patches/minimuxer-rppairing-initialization.patch",
+        ROOT / "patches/minimuxer-ios27-dualstack.patch",
+    )
 
-    if not minimuxer_dir.exists() or not patch_file.exists():
+    if not minimuxer_dir.exists() or any(not patch.exists() for patch in patch_files):
         raise RuntimeError("Required minimuxer source or patch is missing")
 
-    already_applied = subprocess.run(
-        ["git", "-C", str(minimuxer_dir), "apply", "--reverse", "--check", str(patch_file)],
-        cwd=ROOT,
-        stdout=subprocess.DEVNULL,
-        stderr=subprocess.DEVNULL,
-    )
-    if already_applied.returncode == 0:
-        return
+    for patch_file in patch_files:
+        already_applied = subprocess.run(
+            ["git", "-C", str(minimuxer_dir), "apply", "--reverse", "--check", str(patch_file)],
+            cwd=ROOT,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+        )
+        if already_applied.returncode == 0:
+            continue
 
-    run(f"git -C '{minimuxer_dir}' apply --check '{patch_file}'")
-    run(f"git -C '{minimuxer_dir}' apply '{patch_file}'")
+        run(f"git -C '{minimuxer_dir}' apply --check '{patch_file}'")
+        run(f"git -C '{minimuxer_dir}' apply '{patch_file}'")
 
 
 def clean_xcode_module_cache():
