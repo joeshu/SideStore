@@ -19,13 +19,14 @@ public enum AppConstants {
         static let address = "127.0.0.1"
         static let port = "51820"
         static let defaultPort: UInt16 = 51820
-        static let serverURL = "\(address):\(port)"
+        static let serverURL = "\\(address):\\(port)"
     }
     
     public enum Connection {
-        // Prefer route/utun auto-discovery. Users with a fixed VPN endpoint
-        // can still enter a manual Device IP in Connection settings.
-        public static let defaultOverrideIP = ""
+        // Auto-discovery remains preferred by minimuxer. iOS 27/local-VPN
+        // configurations that do not publish a routable peer use the
+        // standard SideStore endpoint as a compatibility fallback.
+        public static let defaultOverrideIP = "10.7.0.1"
         public static let defaultRemoteServerIP = "10.7.0.1"
     }
     
@@ -43,7 +44,7 @@ public enum AppConstants {
         public static let bonjourServiceName = "SideJITServer"
         public static let bonjourServiceType = "_http._tcp"
         public static let timeout: TimeInterval = 2.0
-        public static let defaultServerURL = "http://\(bonjourServiceName).\(bonjourServiceType).local:8080".lowercased()
+        public static let defaultServerURL = "http://\\(bonjourServiceName).\\(bonjourServiceType).local:8080".lowercased()
     }
     
     public enum WebTransferServer {
@@ -57,13 +58,13 @@ public enum AppConstants {
         public static let defaultDeviceSerialNumber = "0"
         public static let defaultODAMetadataURL = "https://zzz.haus/oda.json"
         public static let defaultClientInfo = "<MacBookPro18,3> <macOS;26.6;25F84> <com.apple.AuthKit/1 (com.apple.dt.Xcode/26.0)>"
-        public static let defaultUserAgent = "AuthKit/1 (Macintosh; OS X 26.6) (com.apple.dt.Xcode/26.0)"
+        public static let defaultUserAgent = "AuthKit/1 (Macintosh; OS X 26.6) (com.apple.AuthKit/1 (com.apple.dt.Xcode/26.0))"
     }
 
     public enum Pairing {
         public static let bundleResourceName = "ALTPairingFile"
         public static let fileExtension = "mobiledevicepairing"
-        public static let fileName = "\(bundleResourceName).\(fileExtension)"
+        public static let fileName = "\\(bundleResourceName).\\(fileExtension)"
         public static let placeholderString = "insert pairing file here"
     }
 
