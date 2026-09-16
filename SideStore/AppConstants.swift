@@ -19,14 +19,18 @@ public enum AppConstants {
         static let address = "127.0.0.1"
         static let port = "51820"
         static let defaultPort: UInt16 = 51820
-        static let serverURL = "\\(address):\\(port)"
+        static let serverURL = "\(address):\(port)"
     }
     
     public enum Connection {
-        // Auto-discovery remains preferred by minimuxer. iOS 27/local-VPN
-        // configurations that do not publish a routable peer use the
-        // standard SideStore endpoint as a compatibility fallback.
+        //fix: temporarily reverting the no default overrideIP 
+        //     coz though our auto discovery works perfectly, 
+        //     localDevVPN is flawed in its routing table 
+        //   - so until it is fixed, to reduce friction we are okay with this
+        //
+        // when localdevvpn is fixed, we can comment out the line with an IP with with the one with ""
         public static let defaultOverrideIP = "10.7.0.1"
+        // public static let defaultOverrideIP = ""    // auto-discover is robust we dont need to supply default
         public static let defaultRemoteServerIP = "10.7.0.1"
     }
     
@@ -44,7 +48,7 @@ public enum AppConstants {
         public static let bonjourServiceName = "SideJITServer"
         public static let bonjourServiceType = "_http._tcp"
         public static let timeout: TimeInterval = 2.0
-        public static let defaultServerURL = "http://\\(bonjourServiceName).\\(bonjourServiceType).local:8080".lowercased()
+        public static let defaultServerURL = "http://\(bonjourServiceName).\(bonjourServiceType).local:8080".lowercased()
     }
     
     public enum WebTransferServer {
@@ -64,7 +68,7 @@ public enum AppConstants {
     public enum Pairing {
         public static let bundleResourceName = "ALTPairingFile"
         public static let fileExtension = "mobiledevicepairing"
-        public static let fileName = "\\(bundleResourceName).\\(fileExtension)"
+        public static let fileName = "\(bundleResourceName).\(fileExtension)"
         public static let placeholderString = "insert pairing file here"
     }
 
