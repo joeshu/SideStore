@@ -118,7 +118,7 @@ struct HealthCheckView: View {
 
                 DependencyRow(
                     title: "Minimuxer readiness",
-                    subtitle: "Full readiness probe",
+                    subtitle: "Core readiness probe",
                     isSatisfied: minimuxerSatisfied,
                     latencyMilliseconds: viewModel.minimuxerElapsedMilliseconds
                 )
