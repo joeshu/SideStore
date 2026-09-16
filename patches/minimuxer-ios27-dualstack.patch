@@ -1,0 +1,13 @@
+diff --git a/Sources/Services/DeviceConnectionManager.swift b/Sources/Services/DeviceConnectionManager.swift
+index 0000000..0000000 100644
+--- a/Sources/Services/DeviceConnectionManager.swift
++++ b/Sources/Services/DeviceConnectionManager.swift
+@@ -188,7 +188,7 @@ actor DeviceConnectionManager {
+             .compactMap { $0 as? TunnelNetInfo }
+             .filter { 
+                 $0.tunnelType == .utun && 
+-                !$0.interfaceAddresses.v4.isEmpty && $0.interfaceAddresses.v6.isEmpty 
++                !$0.interfaceAddresses.v4.isEmpty 
+             }
+             .sorted { $0.name < $1.name }
+     }
