@@ -15,17 +15,27 @@ final class PairingFileManager: NSObject {
     static let pairingFileName = AppConstants.Pairing.fileName
     private static let hardwareUDIDKeys: Set<String> = ["udid", "uniquedeviceid"]
 
-    /// Apple hardware UDIDs used by Developer Portal are exactly 40 hex digits.
+    /// Apple Developer Portal accepts both legacy 40-hex UDIDs and the modern
+    /// 8-hex + hyphen + 16-hex format used by newer iPhone/iPad hardware.
     /// RPPairing's `identifier` is a pairing/session identity, not a device UDID.
     static func validatedHardwareUDID(_ value: Any?) -> String? {
         guard let value = value as? String else { return nil }
         let udid = value.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard udid.count == 40,
-              udid.unicodeScalars.allSatisfy({
-                  ($0.value >= 48 && $0.value <= 57) ||
-                  ($0.value >= 65 && $0.value <= 70) ||
-                  ($0.value >= 97 && $0.value <= 102)
-              }) else { return nil }
+
+        let isHex: (Unicode.Scalar) -> Bool = {
+            ($0.value >= 48 && $0.value <= 57) ||
+            ($0.value >= 65 && $0.value <= 70) ||
+            ($0.value >= 97 && $0.value <= 102)
+        }
+
+        let isLegacyUDID = udid.count == 40 && udid.unicodeScalars.allSatisfy(isHex)
+        let components = udid.split(separator: "-", omittingEmptySubsequences: false)
+        let isModernUDID = components.count == 2 &&
+            components[0].count == 8 &&
+            components[1].count == 16 &&
+            components.allSatisfy { $0.unicodeScalars.allSatisfy(isHex) }
+
+        guard isLegacyUDID || isModernUDID else { return nil }
         return udid.uppercased()
     }
 
@@ -43,7 +53,7 @@ final class PairingFileManager: NSObject {
             for (key, value) in pairing.plist where Self.hardwareUDIDKeys.contains(key.lowercased()) {
                 if let udid = Self.validatedHardwareUDID(value) { return udid }
             }
-            debugLog("[PairingFile] pairingUDID: no valid 40-hex hardware UDID in pairing file")
+            debugLog("[PairingFile] pairingUDID: no valid Apple hardware UDID in pairing file")
             return nil
         } catch {
             debugLog("[PairingFile] pairingUDID: failed to parse pairing file: \(error)")
