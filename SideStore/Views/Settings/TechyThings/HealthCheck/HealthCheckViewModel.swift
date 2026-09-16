@@ -206,7 +206,9 @@ final class HealthCheckViewModel: ObservableObject {
         let isPairingLoaded = minimuxer.core.isPairingFileLoaded
 
         let minimuxerStartedAt = Date()
-        let readyResult = await minimuxer.core.isReady(withDDIMountCheck: true)
+        // Core SideStore readiness does not require a mounted Developer Disk Image.
+        // DDI is probed and presented separately as an optional JIT requirement.
+        let readyResult = await minimuxer.core.isReady(withDDIMountCheck: false)
         let minimuxerElapsedMilliseconds = elapsedMilliseconds(since: minimuxerStartedAt)
         let scanned = minimuxer.network.activeInterfaces
         
