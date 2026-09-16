@@ -11,3 +11,55 @@ index 0000000..0000000 100644
              }
              .sorted { $0.name < $1.name }
      }
+
+diff --git a/Sources/Services/NetworkObserverService.swift b/Sources/Services/NetworkObserverService.swift
+index 0000000..0000000 100644
+--- a/Sources/Services/NetworkObserverService.swift
++++ b/Sources/Services/NetworkObserverService.swift
+@@ -104,8 +104,14 @@
+                 return
+                 
+             case .localVPN:
+-                verboseLog("[minimuxer] [net] retrive the first uTun vpn interface info")
+-                if let info = await manager.vpnIface {
++                let overrideIp = await manager.overridePeerIp
++                let isOverrideReachable = await manager.isOverridePeerIpReachable
++
++                if let peer = overrideIp, !peer.isEmpty, isOverrideReachable {
++                    verboseLog("[minimuxer] [net] using reachable override tunnel peer even when auto-discovery has no vpnIface")
++                    await self.endpoint.update(peer)
++                    self.proxyServer.notifyDeviceAttached(tunnelPeerIp: peer)
++                } else if let info = await manager.vpnIface {
+                     verboseLog("""
+                     [minimuxer] [net] vpn interface detected
+                       • name: \(info.name)
+@@ -117,16 +123,12 @@
+                     
+                     """)
+
+-                    let overrideIp = await manager.overridePeerIp
+-                    let isOverridden = !(overrideIp ?? "").isEmpty
+-
+-                    let effectiveIp = await isOverridden
+-                            ? (manager.isOverridePeerIpReachable ? overrideIp : nil)            // when override active, we don't question user intent
+-                            : (manager.isDerivedPeerIpReachable ? manager.derivedPeerIp : nil)  // only if not overriden, we try to use auto discovered
+-                    let effectivePeer = isOverridden ? "overridePeer" : "derivedPeerIp"
++                    let isDerivedReachable = await manager.isDerivedPeerIpReachable
++                    let derivedPeerIp = await manager.derivedPeerIp
++                    let effectiveIp = isDerivedReachable ? derivedPeerIp : nil
+
+                     if let peer = effectiveIp {
+-                        verboseLog("[minimuxer] [net] update device IP with effective tunnel peer: '\(effectivePeer)'")
++                        verboseLog("[minimuxer] [net] update device IP with effective tunnel peer: 'derivedPeerIp'")
+                         await self.endpoint.update(peer)
+                         self.proxyServer.notifyDeviceAttached(tunnelPeerIp: peer)
+                     } else {
+@@ -136,7 +138,7 @@
+                     }
+
+                 } else {
+-                    verboseLog("[minimuxer] [net] no local VPN interface detected")
++                    verboseLog("[minimuxer] [net] no local VPN interface or reachable override detected")
+                     await self.endpoint.clear()
+                     self.proxyServer.notifyDeviceDetached()
+                 }
