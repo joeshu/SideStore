@@ -10,21 +10,26 @@ import Network
 import Minimuxer
 import Combine
 
-private let remotePairingBackendMigrationKey = "SideStoreRemotePairingBackendMigrationV1"
+private let remotePairingBackendMigrationKey = "SideStoreRemotePairingBackendMigrationV2"
 
-public var selectedGatewayBackendCache: GatewayBackend = .libimobiledevice
+public var selectedGatewayBackendCache: GatewayBackend = .idevice
 public var remotePairingPortCache: UInt16 = MinimuxerConstants.remotePairingPort
 
 public func syncMinimuxerBackendFromUserDefaults() {
     let defaults = UserDefaults.standard
     if !defaults.bool(forKey: remotePairingBackendMigrationKey) {
-        defaults.set(GatewayBackend.libimobiledevice.rawValue, forKey: "minimuxerGatewayBackend")
+        // The previous combined build forced the custom libimobiledevice
+        // RPPairing stream backend. On iOS 27 that backend can complete the
+        // tunnel but fail when opening the RSD service stream (code -2). The
+        // idevice backend uses the maintained RPPairing service path and is
+        // the safe default for the combined app.
+        defaults.set(GatewayBackend.idevice.rawValue, forKey: "minimuxerGatewayBackend")
         defaults.set(true, forKey: remotePairingBackendMigrationKey)
-        debugLog("[SideStore] migrated Remote Pairing backend to libimobiledevice")
+        debugLog("[SideStore] migrated Remote Pairing backend to idevice")
     }
 
     let raw = defaults.minimuxerGatewayBackend
-    selectedGatewayBackendCache = GatewayBackend(rawValue: raw) ?? .libimobiledevice
+    selectedGatewayBackendCache = GatewayBackend(rawValue: raw) ?? .idevice
 
     let overridePort = UserDefaults.standard.remotePairingPortOverride
     if overridePort > 0 && overridePort <= 65535 {
